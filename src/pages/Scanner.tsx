@@ -1,6 +1,8 @@
 import { useState, useRef } from "react";
 import { Upload, Camera, Loader2, Recycle, Leaf, AlertTriangle, Zap, Trash2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { toast } from "sonner";
+import { supabase } from "@/integrations/supabase/client";
 
 type WasteCategory = "Recycle" | "Compost" | "Landfill" | "Hazardous" | "E-waste";
 
@@ -21,13 +23,6 @@ const categoryConfig: Record<WasteCategory, { icon: React.ReactNode; color: stri
   "E-waste": { icon: <Zap className="w-6 h-6" />, color: "text-eco-blue", bg: "bg-accent" },
 };
 
-const mockResults: AnalysisResult[] = [
-  { category: "Recycle", material: "PET Plastic (#1)", contamination: "Low", confidence: 94, disposal: "Rinse and place in your blue recycling bin. Remove caps and labels if possible.", explanation: "This appears to be a PET plastic bottle, one of the most commonly recycled plastics." },
-  { category: "Compost", material: "Organic Food Waste", contamination: "Low", confidence: 88, disposal: "Place in your green compost bin. Can also be home composted.", explanation: "Organic food waste breaks down naturally and creates nutrient-rich soil." },
-  { category: "E-waste", material: "Circuit Board / Electronics", contamination: "High", confidence: 91, disposal: "Take to your local e-waste collection point. Do not place in regular bins.", explanation: "Electronic waste contains valuable metals but also hazardous materials." },
-  { category: "Hazardous", material: "Battery (Lithium-ion)", contamination: "High", confidence: 96, disposal: "Drop off at a battery recycling station. Never throw in regular trash.", explanation: "Batteries contain chemicals that can leak and contaminate soil and water." },
-];
-
 const Scanner = () => {
   const [image, setImage] = useState<string | null>(null);
   const [analyzing, setAnalyzing] = useState(false);
@@ -43,12 +38,33 @@ const Scanner = () => {
     reader.readAsDataURL(file);
   };
 
-  const analyze = () => {
+  const analyze = async () => {
+    if (!image) return;
     setAnalyzing(true);
-    setTimeout(() => {
-      setResult(mockResults[Math.floor(Math.random() * mockResults.length)]);
+    try {
+      const { data, error } = await supabase.functions.invoke("analyze-waste", {
+        body: { imageBase64: image },
+      });
+
+      if (error) throw error;
+      if (data?.error) throw new Error(data.error);
+
+      // Validate the response has required fields
+      const validated: AnalysisResult = {
+        category: data.category || "Landfill",
+        material: data.material || "Unknown",
+        contamination: data.contamination || "Medium",
+        confidence: data.confidence || 50,
+        disposal: data.disposal || "Check local guidelines.",
+        explanation: data.explanation || "Could not determine details.",
+      };
+      setResult(validated);
+    } catch (err: any) {
+      console.error("Analysis failed:", err);
+      toast.error(err?.message || "Failed to analyze image. Please try again.");
+    } finally {
       setAnalyzing(false);
-    }, 2000);
+    }
   };
 
   const reset = () => {
@@ -123,8 +139,8 @@ const Scanner = () => {
             {result && (
               <div className="eco-card p-6 animate-scale-in space-y-4">
                 <div className="flex items-center gap-3">
-                  <div className={`w-12 h-12 rounded-xl ${categoryConfig[result.category].bg} flex items-center justify-center ${categoryConfig[result.category].color}`}>
-                    {categoryConfig[result.category].icon}
+                  <div className={`w-12 h-12 rounded-xl ${categoryConfig[result.category]?.bg || "bg-muted"} flex items-center justify-center ${categoryConfig[result.category]?.color || "text-muted-foreground"}`}>
+                    {categoryConfig[result.category]?.icon || <Trash2 className="w-6 h-6" />}
                   </div>
                   <div>
                     <p className="font-bold text-lg">{result.category}</p>
