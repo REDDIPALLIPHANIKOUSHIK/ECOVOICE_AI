@@ -1,6 +1,7 @@
 import { useState, useRef, useEffect } from "react";
 import { Mic, MicOff, Send, Leaf, User } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { toast } from "sonner";
 import type { SpeechRecognition as SpeechRecognitionType } from "@/types/speech.d";
 
 interface Message {
@@ -8,24 +9,7 @@ interface Message {
   content: string;
 }
 
-const wasteResponses: Record<string, string> = {
-  default: `**Category:** General Waste\n**Disposal:** Check your local guidelines for proper disposal.\n**Contamination Risk:** Medium\n**Eco Tip:** When in doubt, clean and separate materials before disposal! 🌱`,
-  plastic: `**Category:** ♻️ Recyclable\n**Disposal:** Rinse the plastic container and place in your recycling bin. Remove any caps or labels.\n**Contamination Risk:** Low\n**Eco Tip:** Choose reusable bottles and containers to reduce plastic waste by up to 80%! 🌿`,
-  battery: `**Category:** ⚠️ Hazardous\n**Disposal:** Never throw batteries in regular trash! Take them to a battery recycling drop-off point.\n**Contamination Risk:** High\n**Eco Tip:** Consider rechargeable batteries — they last years and prevent hundreds of disposable batteries from reaching landfills! 🔋`,
-  food: `**Category:** 🌱 Compostable\n**Disposal:** Place in your green compost bin. Remove any packaging first.\n**Contamination Risk:** Low\n**Eco Tip:** Composting food scraps can reduce your household waste by 30% and creates nutrient-rich soil! 🥕`,
-  phone: `**Category:** 📱 E-Waste\n**Disposal:** Take to a certified e-waste recycling center. Many retailers offer trade-in programs.\n**Contamination Risk:** High\n**Eco Tip:** One recycled phone can save enough energy to charge a laptop for 44 hours! ♻️`,
-  paper: `**Category:** ♻️ Recyclable\n**Disposal:** Place in your paper recycling bin. Remove any plastic windows or staples.\n**Contamination Risk:** Low\n**Eco Tip:** Recycling one ton of paper saves 17 trees and 7,000 gallons of water! 📄`,
-};
-
-const getResponse = (input: string): string => {
-  const lower = input.toLowerCase();
-  if (lower.includes("plastic") || lower.includes("bottle")) return wasteResponses.plastic;
-  if (lower.includes("battery") || lower.includes("batteries")) return wasteResponses.battery;
-  if (lower.includes("food") || lower.includes("banana") || lower.includes("apple")) return wasteResponses.food;
-  if (lower.includes("phone") || lower.includes("laptop") || lower.includes("computer")) return wasteResponses.phone;
-  if (lower.includes("paper") || lower.includes("cardboard")) return wasteResponses.paper;
-  return wasteResponses.default;
-};
+const CHAT_URL = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/chat-waste`;
 
 const Assistant = () => {
   const [messages, setMessages] = useState<Message[]>([
@@ -41,18 +25,107 @@ const Assistant = () => {
     chatEndRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [messages, isTyping]);
 
-  const sendMessage = (text: string) => {
+  const sendMessage = async (text: string) => {
     if (!text.trim()) return;
     const userMsg: Message = { role: "user", content: text.trim() };
-    setMessages((prev) => [...prev, userMsg]);
+    const updatedMessages = [...messages, userMsg];
+    setMessages(updatedMessages);
     setInput("");
     setIsTyping(true);
 
-    setTimeout(() => {
-      const response = getResponse(text);
-      setMessages((prev) => [...prev, { role: "assistant", content: response }]);
+    let assistantSoFar = "";
+
+    try {
+      // Only send user/assistant messages (not the initial greeting for context)
+      const apiMessages = updatedMessages
+        .filter((_, i) => i > 0) // skip initial greeting
+        .map((m) => ({ role: m.role, content: m.content }));
+
+      const resp = await fetch(CHAT_URL, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY}`,
+        },
+        body: JSON.stringify({ messages: apiMessages }),
+      });
+
+      if (!resp.ok) {
+        const errData = await resp.json().catch(() => ({}));
+        throw new Error(errData.error || `Request failed (${resp.status})`);
+      }
+
+      if (!resp.body) throw new Error("No response body");
+
+      const reader = resp.body.getReader();
+      const decoder = new TextDecoder();
+      let textBuffer = "";
+
+      const upsertAssistant = (chunk: string) => {
+        assistantSoFar += chunk;
+        setMessages((prev) => {
+          const last = prev[prev.length - 1];
+          if (last?.role === "assistant" && prev.length > 1 && last !== messages[0]) {
+            return prev.map((m, i) => (i === prev.length - 1 ? { ...m, content: assistantSoFar } : m));
+          }
+          return [...prev, { role: "assistant", content: assistantSoFar }];
+        });
+      };
+
+      let streamDone = false;
+      while (!streamDone) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        textBuffer += decoder.decode(value, { stream: true });
+
+        let newlineIndex: number;
+        while ((newlineIndex = textBuffer.indexOf("\n")) !== -1) {
+          let line = textBuffer.slice(0, newlineIndex);
+          textBuffer = textBuffer.slice(newlineIndex + 1);
+          if (line.endsWith("\r")) line = line.slice(0, -1);
+          if (line.startsWith(":") || line.trim() === "") continue;
+          if (!line.startsWith("data: ")) continue;
+          const jsonStr = line.slice(6).trim();
+          if (jsonStr === "[DONE]") { streamDone = true; break; }
+          try {
+            const parsed = JSON.parse(jsonStr);
+            const content = parsed.choices?.[0]?.delta?.content as string | undefined;
+            if (content) upsertAssistant(content);
+          } catch {
+            textBuffer = line + "\n" + textBuffer;
+            break;
+          }
+        }
+      }
+
+      // Final flush
+      if (textBuffer.trim()) {
+        for (let raw of textBuffer.split("\n")) {
+          if (!raw) continue;
+          if (raw.endsWith("\r")) raw = raw.slice(0, -1);
+          if (raw.startsWith(":") || raw.trim() === "") continue;
+          if (!raw.startsWith("data: ")) continue;
+          const jsonStr = raw.slice(6).trim();
+          if (jsonStr === "[DONE]") continue;
+          try {
+            const parsed = JSON.parse(jsonStr);
+            const content = parsed.choices?.[0]?.delta?.content as string | undefined;
+            if (content) upsertAssistant(content);
+          } catch { /* ignore */ }
+        }
+      }
+
+      // If no response was streamed, add a fallback
+      if (!assistantSoFar) {
+        setMessages((prev) => [...prev, { role: "assistant", content: "I couldn't generate a response. Please try again." }]);
+      }
+    } catch (err: any) {
+      console.error("Chat error:", err);
+      toast.error(err?.message || "Failed to get response");
+      setMessages((prev) => [...prev, { role: "assistant", content: "Sorry, something went wrong. Please try again." }]);
+    } finally {
       setIsTyping(false);
-    }, 1000);
+    }
   };
 
   const toggleListening = () => {
@@ -133,7 +206,7 @@ const Assistant = () => {
           </div>
         ))}
 
-        {isTyping && (
+        {isTyping && !messages[messages.length - 1]?.content && (
           <div className="flex gap-3 animate-fade-in">
             <div className="w-8 h-8 rounded-lg bg-secondary flex items-center justify-center shrink-0">
               <Leaf className="w-4 h-4 text-primary" />
