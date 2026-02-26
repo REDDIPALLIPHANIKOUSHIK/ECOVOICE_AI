@@ -1,7 +1,10 @@
-import { useState, useRef, useEffect } from "react";
-import { Mic, MicOff, Send, Leaf, User } from "lucide-react";
+import { useState, useRef, useEffect, useCallback } from "react";
+import { Mic, MicOff, Send } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { toast } from "sonner";
+import ChatMessage from "@/components/assistant/ChatMessage";
+import TypingIndicator from "@/components/assistant/TypingIndicator";
+import TTSControls from "@/components/assistant/TTSControls";
 import type { SpeechRecognition as SpeechRecognitionType } from "@/types/speech.d";
 
 interface Message {
@@ -13,17 +16,34 @@ const CHAT_URL = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/chat-waste`;
 
 const Assistant = () => {
   const [messages, setMessages] = useState<Message[]>([
-    { role: "assistant", content: "Hi! I'm your EcoVoice assistant 🌿\n\nAsk me about any waste item and I'll help you sort and dispose of it properly. You can type or use your microphone!" },
+    { role: "assistant", content: "Hi! I'm EcoVoice 🌿\n\nAsk me about any waste item and I'll help you sort and dispose of it properly. You can type or use your microphone — I'll even speak the answer back to you!" },
   ]);
   const [input, setInput] = useState("");
   const [listening, setListening] = useState(false);
   const [isTyping, setIsTyping] = useState(false);
+  const [ttsLang, setTtsLang] = useState("en-US");
+  const [ttsSpeed, setTtsSpeed] = useState(1);
+  const [autoSpeak, setAutoSpeak] = useState(true);
   const chatEndRef = useRef<HTMLDivElement>(null);
   const recognitionRef = useRef<SpeechRecognitionType | null>(null);
 
   useEffect(() => {
     chatEndRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [messages, isTyping]);
+
+  const speak = useCallback((text: string) => {
+    window.speechSynthesis.cancel();
+    // Strip markdown bold markers for cleaner speech
+    const cleanText = text.replace(/\*\*(.*?)\*\*/g, "$1");
+    const utterance = new SpeechSynthesisUtterance(cleanText);
+    utterance.lang = ttsLang;
+    utterance.rate = ttsSpeed;
+    // Try to find a matching voice
+    const voices = window.speechSynthesis.getVoices();
+    const match = voices.find((v) => v.lang === ttsLang) || voices.find((v) => v.lang.startsWith(ttsLang.split("-")[0]));
+    if (match) utterance.voice = match;
+    window.speechSynthesis.speak(utterance);
+  }, [ttsLang, ttsSpeed]);
 
   const sendMessage = async (text: string) => {
     if (!text.trim()) return;
@@ -36,9 +56,8 @@ const Assistant = () => {
     let assistantSoFar = "";
 
     try {
-      // Only send user/assistant messages (not the initial greeting for context)
       const apiMessages = updatedMessages
-        .filter((_, i) => i > 0) // skip initial greeting
+        .filter((_, i) => i > 0)
         .map((m) => ({ role: m.role, content: m.content }));
 
       const resp = await fetch(CHAT_URL, {
@@ -98,7 +117,6 @@ const Assistant = () => {
         }
       }
 
-      // Final flush
       if (textBuffer.trim()) {
         for (let raw of textBuffer.split("\n")) {
           if (!raw) continue;
@@ -115,9 +133,11 @@ const Assistant = () => {
         }
       }
 
-      // If no response was streamed, add a fallback
       if (!assistantSoFar) {
         setMessages((prev) => [...prev, { role: "assistant", content: "I couldn't generate a response. Please try again." }]);
+      } else if (autoSpeak) {
+        // Auto-speak the full response
+        speak(assistantSoFar);
       }
     } catch (err: any) {
       console.error("Chat error:", err);
@@ -144,10 +164,9 @@ const Assistant = () => {
     const recognition = new SpeechRecognitionAPI();
     recognition.continuous = false;
     recognition.interimResults = true;
-    recognition.lang = "en-US";
+    recognition.lang = ttsLang; // Use selected language for STT too
 
     recognition.onstart = () => setListening(true);
-
     recognition.onresult = (event) => {
       const results = event.results;
       let transcript = "";
@@ -155,13 +174,11 @@ const Assistant = () => {
         transcript += results[i][0].transcript;
       }
       setInput(transcript);
-
       if (results[0].isFinal) {
         sendMessage(transcript);
         setListening(false);
       }
     };
-
     recognition.onerror = () => setListening(false);
     recognition.onend = () => setListening(false);
 
@@ -169,57 +186,25 @@ const Assistant = () => {
     recognition.start();
   };
 
-  const renderMarkdown = (text: string) => {
-    return text.split("\n").map((line, i) => {
-      const boldReplaced = line.replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>');
-      return <p key={i} className="mb-1" dangerouslySetInnerHTML={{ __html: boldReplaced }} />;
-    });
-  };
-
   return (
     <div className="page-container flex flex-col" style={{ height: "calc(100vh - 8rem)" }}>
-      <div className="text-center mb-6">
-        <h1 className="text-3xl sm:text-4xl font-display font-bold mb-2">Voice & Text Assistant</h1>
-        <p className="text-muted-foreground">Ask about any waste item — type or speak!</p>
+      <div className="text-center mb-4">
+        <h1 className="text-3xl sm:text-4xl font-display font-bold mb-1">EcoVoice Assistant</h1>
+        <p className="text-muted-foreground text-sm">Ask about any waste item — type or speak! I'll talk back 🔊</p>
       </div>
 
-      <div className="flex-1 eco-card p-4 overflow-y-auto mb-4 space-y-4">
-        {messages.map((msg, i) => (
-          <div key={i} className={`flex gap-3 ${msg.role === "user" ? "justify-end" : ""} animate-fade-up`} style={{ animationDelay: `${i * 0.05}s` }}>
-            {msg.role === "assistant" && (
-              <div className="w-8 h-8 rounded-lg bg-secondary flex items-center justify-center shrink-0">
-                <Leaf className="w-4 h-4 text-primary" />
-              </div>
-            )}
-            <div className={`max-w-[80%] rounded-2xl px-4 py-3 text-sm ${
-              msg.role === "user"
-                ? "eco-gradient text-primary-foreground rounded-br-sm"
-                : "bg-muted rounded-bl-sm"
-            }`}>
-              {msg.role === "assistant" ? renderMarkdown(msg.content) : <p>{msg.content}</p>}
-            </div>
-            {msg.role === "user" && (
-              <div className="w-8 h-8 rounded-lg bg-muted flex items-center justify-center shrink-0">
-                <User className="w-4 h-4 text-muted-foreground" />
-              </div>
-            )}
-          </div>
-        ))}
+      <TTSControls
+        language={ttsLang}
+        speed={ttsSpeed}
+        onLanguageChange={setTtsLang}
+        onSpeedChange={setTtsSpeed}
+      />
 
-        {isTyping && !messages[messages.length - 1]?.content && (
-          <div className="flex gap-3 animate-fade-in">
-            <div className="w-8 h-8 rounded-lg bg-secondary flex items-center justify-center shrink-0">
-              <Leaf className="w-4 h-4 text-primary" />
-            </div>
-            <div className="bg-muted rounded-2xl rounded-bl-sm px-4 py-3">
-              <div className="flex gap-1">
-                <span className="w-2 h-2 rounded-full bg-muted-foreground animate-pulse-gentle" />
-                <span className="w-2 h-2 rounded-full bg-muted-foreground animate-pulse-gentle" style={{ animationDelay: "0.2s" }} />
-                <span className="w-2 h-2 rounded-full bg-muted-foreground animate-pulse-gentle" style={{ animationDelay: "0.4s" }} />
-              </div>
-            </div>
-          </div>
-        )}
+      <div className="flex-1 eco-card p-4 overflow-y-auto mt-3 mb-4 space-y-4">
+        {messages.map((msg, i) => (
+          <ChatMessage key={i} role={msg.role} content={msg.content} index={i} onSpeak={msg.role === "assistant" ? speak : undefined} />
+        ))}
+        {isTyping && !messages[messages.length - 1]?.content && <TypingIndicator />}
         <div ref={chatEndRef} />
       </div>
 
