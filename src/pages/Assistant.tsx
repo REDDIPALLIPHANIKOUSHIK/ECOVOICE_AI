@@ -21,7 +21,7 @@ const Assistant = () => {
   const [input, setInput] = useState("");
   const [listening, setListening] = useState(false);
   const [isTyping, setIsTyping] = useState(false);
-  const [ttsLang, setTtsLang] = useState("en-US");
+  const [ttsLang, setTtsLang] = useState("en-IN");
   const [ttsSpeed, setTtsSpeed] = useState(1);
   const [autoSpeak, setAutoSpeak] = useState(true);
   const chatEndRef = useRef<HTMLDivElement>(null);

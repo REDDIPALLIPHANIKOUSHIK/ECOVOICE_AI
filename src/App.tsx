@@ -8,7 +8,7 @@ import Landing from "./pages/Landing";
 import Scanner from "./pages/Scanner";
 import Assistant from "./pages/Assistant";
 import Dashboard from "./pages/Dashboard";
-import Community from "./pages/Community";
+import History from "./pages/History";
 import About from "./pages/About";
 import NotFound from "./pages/NotFound";
 
@@ -26,7 +26,7 @@ const App = () => (
             <Route path="/scanner" element={<Scanner />} />
             <Route path="/assistant" element={<Assistant />} />
             <Route path="/dashboard" element={<Dashboard />} />
-            <Route path="/community" element={<Community />} />
+            <Route path="/history" element={<History />} />
             <Route path="/about" element={<About />} />
             <Route path="*" element={<NotFound />} />
           </Routes>

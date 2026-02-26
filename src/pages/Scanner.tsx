@@ -3,6 +3,7 @@ import { Upload, Camera, Loader2, Recycle, Leaf, AlertTriangle, Zap, Trash2 } fr
 import { Button } from "@/components/ui/button";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
+import { addScan } from "@/lib/scan-store";
 
 type WasteCategory = "Recycle" | "Compost" | "Landfill" | "Hazardous" | "E-waste";
 
@@ -59,6 +60,15 @@ const Scanner = () => {
         explanation: data.explanation || "Could not determine details.",
       };
       setResult(validated);
+      addScan({
+        item: validated.material,
+        category: validated.category,
+        material: validated.material,
+        confidence: validated.confidence,
+        contamination: validated.contamination,
+        disposal: validated.disposal,
+      });
+      toast.success("🌱 Great job scanning! Your eco-impact is growing!");
     } catch (err: any) {
       console.error("Analysis failed:", err);
       toast.error(err?.message || "Failed to analyze image. Please try again.");

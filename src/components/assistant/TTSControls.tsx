@@ -1,6 +1,7 @@
-import { Globe, Gauge } from "lucide-react";
+import { Globe, Gauge, VolumeX } from "lucide-react";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Slider } from "@/components/ui/slider";
+import { Button } from "@/components/ui/button";
 
 interface TTSControlsProps {
   language: string;
@@ -10,20 +11,25 @@ interface TTSControlsProps {
 }
 
 const LANGUAGES = [
-  { value: "en-US", label: "English (US)" },
-  { value: "en-GB", label: "English (UK)" },
-  { value: "es-ES", label: "Español" },
+  { value: "en-IN", label: "English (India)" },
+  { value: "hi-IN", label: "हिन्दी" },
+  { value: "ta-IN", label: "தமிழ்" },
+  { value: "te-IN", label: "తెలుగు" },
+  { value: "kn-IN", label: "ಕನ್ನಡ" },
+  { value: "ml-IN", label: "മലയാളം" },
+  { value: "bn-IN", label: "বাংলা" },
+  { value: "mr-IN", label: "मराठी" },
+  { value: "gu-IN", label: "ગુજરાતી" },
+  { value: "pa-IN", label: "ਪੰਜਾਬੀ" },
   { value: "fr-FR", label: "Français" },
   { value: "de-DE", label: "Deutsch" },
-  { value: "pt-BR", label: "Português (BR)" },
-  { value: "ar-SA", label: "العربية" },
-  { value: "hi-IN", label: "हिन्दी" },
-  { value: "zh-CN", label: "中文" },
-  { value: "ja-JP", label: "日本語" },
+  { value: "pt-BR", label: "Português" },
 ];
 
+const stopSpeaking = () => window.speechSynthesis.cancel();
+
 const TTSControls = ({ language, speed, onLanguageChange, onSpeedChange }: TTSControlsProps) => (
-  <div className="flex items-center gap-3 px-2 py-2 bg-muted/50 rounded-xl text-xs">
+  <div className="flex items-center gap-3 px-2 py-2 bg-muted/50 rounded-xl text-xs flex-wrap">
     <div className="flex items-center gap-1.5">
       <Globe className="w-3.5 h-3.5 text-muted-foreground" />
       <Select value={language} onValueChange={onLanguageChange}>
@@ -49,6 +55,15 @@ const TTSControls = ({ language, speed, onLanguageChange, onSpeedChange }: TTSCo
       />
       <span className="text-muted-foreground w-8 text-right">{speed}x</span>
     </div>
+    <Button
+      variant="outline"
+      size="sm"
+      className="h-7 text-xs gap-1"
+      onClick={stopSpeaking}
+      aria-label="Stop speaking"
+    >
+      <VolumeX className="w-3.5 h-3.5" /> Stop
+    </Button>
   </div>
 );
 
