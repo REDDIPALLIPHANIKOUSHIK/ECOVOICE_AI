@@ -14,7 +14,51 @@ export type Database = {
   }
   public: {
     Tables: {
-      [_ in never]: never
+      recycling_history: {
+        Row: {
+          id: string
+          item: string
+          category: string
+          material: string
+          confidence: number
+          contamination: string
+          disposal: string
+          city: string | null
+          state: string | null
+          country: string | null
+          timestamp: string
+          created_at: string
+        }
+        Insert: {
+          id: string
+          item: string
+          category: string
+          material: string
+          confidence?: number
+          contamination?: string
+          disposal: string
+          city?: string | null
+          state?: string | null
+          country?: string | null
+          timestamp?: string
+          created_at?: string
+        }
+        Update: {
+          id?: string
+          item?: string
+          category?: string
+          material?: string
+          confidence?: number
+          contamination?: string
+          disposal?: string
+          city?: string | null
+          state?: string | null
+          country?: string | null
+          timestamp?: string
+          created_at?: string
+        }
+        Relationships: []
+      }
     }
     Views: {
       [_ in never]: never
