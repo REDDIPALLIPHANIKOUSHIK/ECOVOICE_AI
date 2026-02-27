@@ -16,6 +16,12 @@ interface Message {
   content: string;
 }
 
+interface VoiceOption {
+  name: string;
+  lang: string;
+  voiceURI: string;
+}
+
 const CHAT_URL = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/chat-waste`;
 
 const LANGUAGE_PATTERNS: Array<{ lang: string; regex: RegExp }> = [
@@ -29,17 +35,6 @@ const LANGUAGE_PATTERNS: Array<{ lang: string; regex: RegExp }> = [
   { lang: "mr-IN", regex: /[\u0900-\u097F]/ },
   { lang: "pa-IN", regex: /[\u0A00-\u0A7F]/ },
 ];
-
-const getVoiceForLanguage = (voices: SpeechSynthesisVoice[], language: string): SpeechSynthesisVoice | undefined => {
-  const baseLang = language.split("-")[0].toLowerCase();
-  const exact = voices.find((voice) => voice.lang.toLowerCase() === language.toLowerCase());
-  if (exact) return exact;
-
-  const sameBase = voices.find((voice) => voice.lang.toLowerCase().startsWith(baseLang));
-  if (sameBase) return sameBase;
-
-  return voices.find((voice) => `${voice.name} ${voice.lang}`.toLowerCase().includes(baseLang));
-};
 
 const detectLanguageFromText = (text: string): string => {
   for (const pattern of LANGUAGE_PATTERNS) {
@@ -79,14 +74,29 @@ const Assistant = () => {
   const [listening, setListening] = useState(false);
   const [isTyping, setIsTyping] = useState(false);
   const [ttsLang, setTtsLang] = useState("en-IN");
-  const ttsSpeed = 1;
+  const [speechLanguage, setSpeechLanguage] = useState("auto");
+  const [ttsSpeed, setTtsSpeed] = useState(1);
   const [autoSpeak, setAutoSpeak] = useState(true);
   const [voiceTone, setVoiceTone] = useState<"friendly" | "formal">("friendly");
+  const [availableVoices, setAvailableVoices] = useState<VoiceOption[]>([]);
+  const [selectedVoiceURI, setSelectedVoiceURI] = useState("auto");
   const [location, setLocation] = useState<UserLocation | null>(() => getSavedLocation());
   const [lastUserLanguage, setLastUserLanguage] = useState("en-IN");
   const chatEndRef = useRef<HTMLDivElement>(null);
   const recognitionRef = useRef<SpeechRecognitionType | null>(null);
   const pendingSpeakRef = useRef<Promise<void>>(Promise.resolve());
+
+  useEffect(() => {
+    const loadVoices = () => {
+      const voices = window.speechSynthesis.getVoices();
+      setAvailableVoices(voices.map((v) => ({ name: v.name, lang: v.lang, voiceURI: v.voiceURI })));
+    };
+    loadVoices();
+    window.speechSynthesis.onvoiceschanged = loadVoices;
+    return () => {
+      window.speechSynthesis.onvoiceschanged = null;
+    };
+  }, []);
 
   useEffect(() => {
     chatEndRef.current?.scrollIntoView({ behavior: "smooth" });
@@ -103,13 +113,13 @@ const Assistant = () => {
       utterance.pitch = voiceTone === "friendly" ? 1.08 : 0.92;
 
       const voices = window.speechSynthesis.getVoices();
-      const match = getVoiceForLanguage(voices, outputLang);
+      const selected = selectedVoiceURI !== "auto" ? voices.find((v) => v.voiceURI === selectedVoiceURI) : undefined;
+      const match =
+        selected ||
+        voices.find((v) => v.lang === outputLang) ||
+        voices.find((v) => v.lang.startsWith(outputLang.split("-")[0]));
 
-      if (match) {
-        utterance.voice = match;
-      } else if (outputLang !== "en-IN") {
-        toast.warning(`No ${outputLang} voice found on this device. Install that language voice for native speech output.`);
-      }
+      if (match) utterance.voice = match;
 
       await new Promise<void>((resolve) => {
         utterance.onend = () => resolve();
@@ -117,13 +127,12 @@ const Assistant = () => {
         window.speechSynthesis.speak(utterance);
       });
     });
-  }, [ttsLang, ttsSpeed, voiceTone]);
+  }, [selectedVoiceURI, ttsLang, ttsSpeed, voiceTone]);
 
   const sendMessage = async (text: string) => {
     if (!text.trim()) return;
-    const inferredLang = detectLanguageFromText(text);
-    setTtsLang(inferredLang);
-    setLastUserLanguage(inferredLang);
+    const inferredLang = speechLanguage === "auto" ? detectLanguageFromText(text) : speechLanguage;
+    if (speechLanguage === "auto") setTtsLang(inferredLang);
 
     const userMsg: Message = { role: "user", content: text.trim() };
     const updatedMessages = [...messages, userMsg];
@@ -202,7 +211,8 @@ const Assistant = () => {
       } else {
         playEcoSound();
         if (autoSpeak) {
-          setTimeout(() => speak(assistantSoFar, inferredLang || lastUserLanguage), 150);
+          const responseLang = detectLanguageFromText(assistantSoFar);
+          setTimeout(() => speak(assistantSoFar, responseLang), 150);
         }
       }
     } catch (err: any) {
@@ -230,23 +240,23 @@ const Assistant = () => {
     const recognition = new SpeechRecognitionAPI();
     recognition.continuous = false;
     recognition.interimResults = true;
-    recognition.maxAlternatives = 1;
-    recognition.lang = navigator.language || "en-IN";
+    recognition.maxAlternatives = 3;
+    recognition.lang = speechLanguage === "auto" ? navigator.language || "en-IN" : speechLanguage;
 
     let latestTranscript = "";
     recognition.onstart = () => setListening(true);
     recognition.onresult = (event) => {
-      const latestResult = event.results[event.results.length - 1];
-      const transcript = latestResult[0].transcript.trim();
-      latestTranscript = transcript || latestTranscript;
-      setInput(latestTranscript);
+      const results = event.results;
+      let transcript = "";
+      for (let i = 0; i < results.length; i++) transcript += results[i][0].transcript;
+      setInput(transcript);
 
-      if (latestResult.isFinal && latestTranscript) {
-        const detected = detectLanguageFromText(latestTranscript);
-        setTtsLang(detected);
-        setLastUserLanguage(detected);
-        sendMessage(latestTranscript);
-        latestTranscript = "";
+      if (results[0].isFinal) {
+        if (speechLanguage === "auto") {
+          const detected = detectLanguageFromText(transcript);
+          setTtsLang(detected);
+        }
+        sendMessage(transcript);
         setListening(false);
       }
     };
@@ -276,11 +286,19 @@ const Assistant = () => {
       <div className="flex flex-col sm:flex-row gap-2 mb-3">
         <div className="flex-1">
           <TTSControls
+            language={ttsLang}
+            speechLanguage={speechLanguage}
+            speed={ttsSpeed}
             autoSpeak={autoSpeak}
             voiceTone={voiceTone}
-            detectedLanguageLabel={ttsLang}
+            voices={availableVoices}
+            selectedVoiceURI={selectedVoiceURI}
+            onLanguageChange={setTtsLang}
+            onSpeechLanguageChange={setSpeechLanguage}
+            onSpeedChange={setTtsSpeed}
             onAutoSpeakChange={setAutoSpeak}
             onVoiceToneChange={setVoiceTone}
+            onVoiceChange={setSelectedVoiceURI}
           />
         </div>
         <div className="flex items-center bg-muted/50 rounded-xl px-3 border border-border/50">
