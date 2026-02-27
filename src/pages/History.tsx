@@ -1,6 +1,6 @@
 import { useState, useEffect } from "react";
 import { Recycle, Leaf, AlertTriangle, Zap, Trash2, Clock, Sparkles, MapPin, Flame } from "lucide-react";
-import { getScans, getStreak, type ScanRecord } from "@/lib/scan-store";
+import { getScans, getStreak, syncScansFromDatabase, type ScanRecord } from "@/lib/scan-store";
 
 const categoryIcon: Record<string, React.ReactNode> = {
   Recycle: <Recycle className="w-4 h-4" />,
@@ -35,7 +35,8 @@ const History = () => {
   const [quote] = useState(() => motivationalQuotes[Math.floor(Math.random() * motivationalQuotes.length)]);
 
   useEffect(() => {
-    const load = () => {
+    const load = async () => {
+      await syncScansFromDatabase().catch(() => undefined);
       setScans(getScans());
       setStreak(getStreak());
     };

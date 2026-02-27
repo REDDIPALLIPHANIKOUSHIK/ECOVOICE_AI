@@ -74,7 +74,7 @@ const Scanner = () => {
       setShowSuccess(true);
       setTimeout(() => setShowSuccess(false), 3000);
 
-      addScan({
+      await addScan({
         item: validated.material,
         category: validated.category,
         material: validated.material,
@@ -82,6 +82,8 @@ const Scanner = () => {
         contamination: validated.contamination,
         disposal: validated.disposal,
         city: location?.city,
+        state: location?.state,
+        country: location?.country,
       });
 
       // Play success sound
