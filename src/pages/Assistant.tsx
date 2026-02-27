@@ -1,10 +1,14 @@
 import { useState, useRef, useEffect, useCallback } from "react";
-import { Mic, MicOff, Send } from "lucide-react";
+import { Send } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { toast } from "sonner";
 import ChatMessage from "@/components/assistant/ChatMessage";
 import TypingIndicator from "@/components/assistant/TypingIndicator";
 import TTSControls from "@/components/assistant/TTSControls";
+import LocationSelector from "@/components/LocationSelector";
+import WaveformAnimation from "@/components/WaveformAnimation";
+import FloatingVoiceButton from "@/components/FloatingVoiceButton";
+import { getSavedLocation, getLocationRules, type UserLocation } from "@/lib/location";
 import type { SpeechRecognition as SpeechRecognitionType } from "@/types/speech.d";
 
 interface Message {
@@ -14,9 +18,27 @@ interface Message {
 
 const CHAT_URL = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/chat-waste`;
 
+// Eco success sound
+const playEcoSound = () => {
+  try {
+    const ctx = new AudioContext();
+    const osc = ctx.createOscillator();
+    const gain = ctx.createGain();
+    osc.connect(gain);
+    gain.connect(ctx.destination);
+    osc.frequency.setValueAtTime(523, ctx.currentTime);
+    osc.frequency.setValueAtTime(659, ctx.currentTime + 0.1);
+    osc.frequency.setValueAtTime(784, ctx.currentTime + 0.2);
+    gain.gain.setValueAtTime(0.15, ctx.currentTime);
+    gain.gain.exponentialRampToValueAtTime(0.01, ctx.currentTime + 0.4);
+    osc.start(ctx.currentTime);
+    osc.stop(ctx.currentTime + 0.4);
+  } catch { /* ignore audio errors */ }
+};
+
 const Assistant = () => {
   const [messages, setMessages] = useState<Message[]>([
-    { role: "assistant", content: "Hi! I'm EcoVoice 🌿\n\nAsk me about any waste item and I'll help you sort and dispose of it properly. You can type or use your microphone — I'll even speak the answer back to you!" },
+    { role: "assistant", content: "Hi! I'm EcoVoice 🌿\n\nAsk me about any waste item and I'll help you sort and dispose of it properly. You can type or use your microphone — I'll even speak the answer back to you!\n\nTry saying: \"How do I recycle a plastic bottle?\"" },
   ]);
   const [input, setInput] = useState("");
   const [listening, setListening] = useState(false);
@@ -24,6 +46,7 @@ const Assistant = () => {
   const [ttsLang, setTtsLang] = useState("en-IN");
   const [ttsSpeed, setTtsSpeed] = useState(1);
   const [autoSpeak, setAutoSpeak] = useState(true);
+  const [location, setLocation] = useState<UserLocation | null>(() => getSavedLocation());
   const chatEndRef = useRef<HTMLDivElement>(null);
   const recognitionRef = useRef<SpeechRecognitionType | null>(null);
 
@@ -33,12 +56,10 @@ const Assistant = () => {
 
   const speak = useCallback((text: string) => {
     window.speechSynthesis.cancel();
-    // Strip markdown bold markers for cleaner speech
-    const cleanText = text.replace(/\*\*(.*?)\*\*/g, "$1");
+    const cleanText = text.replace(/\*\*(.*?)\*\*/g, "$1").replace(/[#*_~`]/g, "");
     const utterance = new SpeechSynthesisUtterance(cleanText);
     utterance.lang = ttsLang;
     utterance.rate = ttsSpeed;
-    // Try to find a matching voice
     const voices = window.speechSynthesis.getVoices();
     const match = voices.find((v) => v.lang === ttsLang) || voices.find((v) => v.lang.startsWith(ttsLang.split("-")[0]));
     if (match) utterance.voice = match;
@@ -60,13 +81,18 @@ const Assistant = () => {
         .filter((_, i) => i > 0)
         .map((m) => ({ role: m.role, content: m.content }));
 
+      // Add location context
+      const locationContext = location
+        ? `User is in ${location.city}, ${location.state}, ${location.country}. Local rules: ${getLocationRules(location)}`
+        : "User location unknown. Provide general recycling guidelines.";
+
       const resp = await fetch(CHAT_URL, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
           Authorization: `Bearer ${import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY}`,
         },
-        body: JSON.stringify({ messages: apiMessages }),
+        body: JSON.stringify({ messages: apiMessages, locationContext }),
       });
 
       if (!resp.ok) {
@@ -135,9 +161,11 @@ const Assistant = () => {
 
       if (!assistantSoFar) {
         setMessages((prev) => [...prev, { role: "assistant", content: "I couldn't generate a response. Please try again." }]);
-      } else if (autoSpeak) {
-        // Auto-speak the full response
-        speak(assistantSoFar);
+      } else {
+        playEcoSound();
+        if (autoSpeak) {
+          setTimeout(() => speak(assistantSoFar), 200);
+        }
       }
     } catch (err: any) {
       console.error("Chat error:", err);
@@ -151,7 +179,7 @@ const Assistant = () => {
   const toggleListening = () => {
     const SpeechRecognitionAPI = window.SpeechRecognition || window.webkitSpeechRecognition;
     if (!SpeechRecognitionAPI) {
-      alert("Speech recognition is not supported in this browser. Please try Chrome or Edge.");
+      toast.error("Speech recognition is not supported in this browser. Please try Chrome or Edge.");
       return;
     }
 
@@ -164,7 +192,7 @@ const Assistant = () => {
     const recognition = new SpeechRecognitionAPI();
     recognition.continuous = false;
     recognition.interimResults = true;
-    recognition.lang = ttsLang; // Use selected language for STT too
+    recognition.lang = ttsLang;
 
     recognition.onstart = () => setListening(true);
     recognition.onresult = (event) => {
@@ -188,19 +216,35 @@ const Assistant = () => {
 
   return (
     <div className="page-container flex flex-col" style={{ height: "calc(100vh - 8rem)" }}>
-      <div className="text-center mb-4">
-        <h1 className="text-3xl sm:text-4xl font-display font-bold mb-1">EcoVoice Assistant</h1>
+      <div className="text-center mb-3">
+        <h1 className="text-3xl sm:text-4xl font-display font-bold mb-1 eco-gradient-text">EcoVoice Assistant</h1>
         <p className="text-muted-foreground text-sm">Ask about any waste item — type or speak! I'll talk back 🔊</p>
       </div>
 
-      <TTSControls
-        language={ttsLang}
-        speed={ttsSpeed}
-        onLanguageChange={setTtsLang}
-        onSpeedChange={setTtsSpeed}
-      />
+      <div className="flex flex-col sm:flex-row gap-2 mb-3">
+        <div className="flex-1">
+          <TTSControls
+            language={ttsLang}
+            speed={ttsSpeed}
+            autoSpeak={autoSpeak}
+            onLanguageChange={setTtsLang}
+            onSpeedChange={setTtsSpeed}
+            onAutoSpeakChange={setAutoSpeak}
+          />
+        </div>
+        <div className="flex items-center bg-muted/50 rounded-xl px-3 border border-border/50">
+          <LocationSelector location={location} onLocationChange={setLocation} />
+        </div>
+      </div>
 
-      <div className="flex-1 eco-card p-4 overflow-y-auto mt-3 mb-4 space-y-4">
+      {listening && (
+        <div className="flex items-center justify-center gap-3 py-2 mb-2 bg-destructive/10 rounded-xl border border-destructive/20">
+          <WaveformAnimation active={listening} />
+          <span className="text-sm font-medium text-destructive">Listening...</span>
+        </div>
+      )}
+
+      <div className="flex-1 eco-card p-4 overflow-y-auto mb-4 space-y-4">
         {messages.map((msg, i) => (
           <ChatMessage key={i} role={msg.role} content={msg.content} index={i} onSpeak={msg.role === "assistant" ? speak : undefined} />
         ))}
@@ -208,16 +252,7 @@ const Assistant = () => {
         <div ref={chatEndRef} />
       </div>
 
-      <div className="flex gap-2">
-        <Button
-          variant={listening ? "destructive" : "outline"}
-          size="icon"
-          onClick={toggleListening}
-          className="shrink-0"
-          aria-label={listening ? "Stop listening" : "Start voice input"}
-        >
-          {listening ? <MicOff className="w-4 h-4" /> : <Mic className="w-4 h-4" />}
-        </Button>
+      <div className="flex gap-2 pr-16">
         <div className="flex-1 relative">
           <input
             type="text"
@@ -225,14 +260,16 @@ const Assistant = () => {
             onChange={(e) => setInput(e.target.value)}
             onKeyDown={(e) => e.key === "Enter" && sendMessage(input)}
             placeholder="Ask about any waste item..."
-            className="w-full bg-muted rounded-xl px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-ring"
+            className="w-full bg-muted rounded-xl px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-ring border border-border/50"
             aria-label="Type your question"
           />
         </div>
-        <Button size="icon" onClick={() => sendMessage(input)} className="shrink-0" aria-label="Send message">
+        <Button size="icon" onClick={() => sendMessage(input)} className="shrink-0 rounded-xl" aria-label="Send message">
           <Send className="w-4 h-4" />
         </Button>
       </div>
+
+      <FloatingVoiceButton listening={listening} onToggle={toggleListening} showOnAssistant />
     </div>
   );
 };

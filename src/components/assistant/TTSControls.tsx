@@ -1,13 +1,16 @@
-import { Globe, Gauge, VolumeX } from "lucide-react";
+import { Globe, Gauge, VolumeX, Volume2 } from "lucide-react";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Slider } from "@/components/ui/slider";
 import { Button } from "@/components/ui/button";
+import { Switch } from "@/components/ui/switch";
 
 interface TTSControlsProps {
   language: string;
   speed: number;
+  autoSpeak: boolean;
   onLanguageChange: (lang: string) => void;
   onSpeedChange: (speed: number) => void;
+  onAutoSpeakChange: (val: boolean) => void;
 }
 
 const LANGUAGES = [
@@ -28,8 +31,8 @@ const LANGUAGES = [
 
 const stopSpeaking = () => window.speechSynthesis.cancel();
 
-const TTSControls = ({ language, speed, onLanguageChange, onSpeedChange }: TTSControlsProps) => (
-  <div className="flex items-center gap-3 px-2 py-2 bg-muted/50 rounded-xl text-xs flex-wrap">
+const TTSControls = ({ language, speed, autoSpeak, onLanguageChange, onSpeedChange, onAutoSpeakChange }: TTSControlsProps) => (
+  <div className="flex items-center gap-3 px-3 py-2.5 bg-muted/50 rounded-xl text-xs flex-wrap border border-border/50">
     <div className="flex items-center gap-1.5">
       <Globe className="w-3.5 h-3.5 text-muted-foreground" />
       <Select value={language} onValueChange={onLanguageChange}>
@@ -55,10 +58,15 @@ const TTSControls = ({ language, speed, onLanguageChange, onSpeedChange }: TTSCo
       />
       <span className="text-muted-foreground w-8 text-right">{speed}x</span>
     </div>
+    <div className="flex items-center gap-1.5">
+      <Volume2 className="w-3.5 h-3.5 text-muted-foreground" />
+      <Switch checked={autoSpeak} onCheckedChange={onAutoSpeakChange} className="scale-75" />
+      <span className="text-muted-foreground">Auto</span>
+    </div>
     <Button
       variant="outline"
       size="sm"
-      className="h-7 text-xs gap-1"
+      className="h-7 text-xs gap-1 ml-auto"
       onClick={stopSpeaking}
       aria-label="Stop speaking"
     >

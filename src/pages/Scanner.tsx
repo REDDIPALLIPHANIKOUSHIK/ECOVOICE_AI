@@ -1,9 +1,11 @@
-import { useState, useRef } from "react";
-import { Upload, Camera, Loader2, Recycle, Leaf, AlertTriangle, Zap, Trash2 } from "lucide-react";
+import { useState, useRef, useEffect } from "react";
+import { Upload, Camera, Loader2, Recycle, Leaf, AlertTriangle, Zap, Trash2, CheckCircle, MapPin } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
 import { addScan } from "@/lib/scan-store";
+import { getSavedLocation, getLocationRules, type UserLocation } from "@/lib/location";
+import LocationSelector from "@/components/LocationSelector";
 
 type WasteCategory = "Recycle" | "Compost" | "Landfill" | "Hazardous" | "E-waste";
 
@@ -28,6 +30,8 @@ const Scanner = () => {
   const [image, setImage] = useState<string | null>(null);
   const [analyzing, setAnalyzing] = useState(false);
   const [result, setResult] = useState<AnalysisResult | null>(null);
+  const [showSuccess, setShowSuccess] = useState(false);
+  const [location, setLocation] = useState<UserLocation | null>(() => getSavedLocation());
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const handleFile = (file: File) => {
@@ -35,6 +39,7 @@ const Scanner = () => {
     reader.onload = (e) => {
       setImage(e.target?.result as string);
       setResult(null);
+      setShowSuccess(false);
     };
     reader.readAsDataURL(file);
   };
@@ -50,7 +55,6 @@ const Scanner = () => {
       if (error) throw error;
       if (data?.error) throw new Error(data.error);
 
-      // Validate the response has required fields
       const validated: AnalysisResult = {
         category: data.category || "Landfill",
         material: data.material || "Unknown",
@@ -59,7 +63,17 @@ const Scanner = () => {
         disposal: data.disposal || "Check local guidelines.",
         explanation: data.explanation || "Could not determine details.",
       };
+
+      // Append location-specific rules
+      if (location) {
+        const localRule = getLocationRules(location, validated.material);
+        validated.disposal = `${validated.disposal}\n\n📍 ${location.city} specific: ${localRule}`;
+      }
+
       setResult(validated);
+      setShowSuccess(true);
+      setTimeout(() => setShowSuccess(false), 3000);
+
       addScan({
         item: validated.material,
         category: validated.category,
@@ -67,7 +81,24 @@ const Scanner = () => {
         confidence: validated.confidence,
         contamination: validated.contamination,
         disposal: validated.disposal,
+        city: location?.city,
       });
+
+      // Play success sound
+      try {
+        const ctx = new AudioContext();
+        const osc = ctx.createOscillator();
+        const gain = ctx.createGain();
+        osc.connect(gain);
+        gain.connect(ctx.destination);
+        osc.frequency.setValueAtTime(523, ctx.currentTime);
+        osc.frequency.setValueAtTime(784, ctx.currentTime + 0.15);
+        gain.gain.setValueAtTime(0.12, ctx.currentTime);
+        gain.gain.exponentialRampToValueAtTime(0.01, ctx.currentTime + 0.3);
+        osc.start(ctx.currentTime);
+        osc.stop(ctx.currentTime + 0.3);
+      } catch {}
+
       toast.success("🌱 Great job scanning! Your eco-impact is growing!");
     } catch (err: any) {
       console.error("Analysis failed:", err);
@@ -80,6 +111,7 @@ const Scanner = () => {
   const reset = () => {
     setImage(null);
     setResult(null);
+    setShowSuccess(false);
   };
 
   const contaminationColor = (level: string) => {
@@ -90,29 +122,51 @@ const Scanner = () => {
 
   return (
     <div className="page-container">
-      <div className="text-center mb-10">
-        <h1 className="text-3xl sm:text-4xl font-display font-bold mb-3">Waste Scanner</h1>
+      <div className="text-center mb-8">
+        <h1 className="text-3xl sm:text-4xl font-display font-bold mb-3 eco-gradient-text">Waste Scanner</h1>
         <p className="text-muted-foreground max-w-lg mx-auto">
           Upload or capture an image of any waste item and our AI will identify it and tell you exactly how to dispose of it.
         </p>
       </div>
 
       <div className="max-w-xl mx-auto">
+        {/* Location bar */}
+        <div className="eco-card p-3 mb-4 flex items-center justify-between">
+          <LocationSelector location={location} onLocationChange={setLocation} />
+          {location && (
+            <span className="text-xs text-muted-foreground hidden sm:block">
+              Rules adapted for {location.city}
+            </span>
+          )}
+        </div>
+
+        {/* Success animation overlay */}
+        {showSuccess && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center pointer-events-none">
+            <div className="flex flex-col items-center animate-scale-in">
+              <div className="w-24 h-24 rounded-full bg-primary/10 flex items-center justify-center mb-4">
+                <CheckCircle className="w-16 h-16 text-primary animate-float" />
+              </div>
+              <p className="text-xl font-bold text-primary">Sorted! 🌱</p>
+            </div>
+          </div>
+        )}
+
         {!image ? (
           <div
-            className="eco-card p-12 text-center cursor-pointer hover:border-primary/50 transition-colors"
+            className="eco-card p-12 text-center cursor-pointer hover:border-primary/50 transition-all duration-300 hover:shadow-md group"
             onClick={() => fileInputRef.current?.click()}
           >
-            <div className="w-16 h-16 mx-auto mb-4 rounded-2xl bg-secondary flex items-center justify-center">
+            <div className="w-16 h-16 mx-auto mb-4 rounded-2xl bg-secondary flex items-center justify-center group-hover:scale-110 transition-transform">
               <Upload className="w-8 h-8 text-primary" />
             </div>
             <p className="font-semibold mb-1">Upload an image</p>
             <p className="text-sm text-muted-foreground mb-4">Drag & drop or click to browse</p>
             <div className="flex justify-center gap-3">
-              <Button onClick={(e) => { e.stopPropagation(); fileInputRef.current?.click(); }}>
+              <Button onClick={(e) => { e.stopPropagation(); fileInputRef.current?.click(); }} className="rounded-xl">
                 <Upload className="w-4 h-4 mr-2" /> Upload
               </Button>
-              <Button variant="outline" onClick={(e) => { e.stopPropagation(); fileInputRef.current?.click(); }}>
+              <Button variant="outline" onClick={(e) => { e.stopPropagation(); fileInputRef.current?.click(); }} className="rounded-xl">
                 <Camera className="w-4 h-4 mr-2" /> Camera
               </Button>
             </div>
@@ -133,8 +187,8 @@ const Scanner = () => {
 
             {!result && !analyzing && (
               <div className="flex gap-3">
-                <Button className="flex-1" onClick={analyze}>Analyze Waste</Button>
-                <Button variant="outline" onClick={reset}>Clear</Button>
+                <Button className="flex-1 rounded-xl" onClick={analyze}>Analyze Waste</Button>
+                <Button variant="outline" onClick={reset} className="rounded-xl">Clear</Button>
               </div>
             )}
 
@@ -177,12 +231,19 @@ const Scanner = () => {
 
                 <div className="bg-secondary rounded-xl p-4">
                   <p className="text-xs font-medium text-secondary-foreground mb-1">Disposal Instructions</p>
-                  <p className="text-sm">{result.disposal}</p>
+                  <p className="text-sm whitespace-pre-line">{result.disposal}</p>
                 </div>
+
+                {location && (
+                  <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
+                    <MapPin className="w-3 h-3" />
+                    <span>Guidelines adapted for {location.city}, {location.state}</span>
+                  </div>
+                )}
 
                 <p className="text-sm text-muted-foreground">{result.explanation}</p>
 
-                <Button variant="outline" className="w-full" onClick={reset}>
+                <Button variant="outline" className="w-full rounded-xl" onClick={reset}>
                   Scan Another Item
                 </Button>
               </div>
