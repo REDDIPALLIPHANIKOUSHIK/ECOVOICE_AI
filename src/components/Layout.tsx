@@ -1,6 +1,7 @@
 import { Link, useLocation } from "react-router-dom";
-import { Leaf, Menu, X } from "lucide-react";
+import { Menu, X } from "lucide-react";
 import { useState } from "react";
+import EcoVoiceIcon from "./EcoVoiceIcon";
 
 const navLinks = [
   { to: "/", label: "Home" },
@@ -19,9 +20,9 @@ const Layout = ({ children }: { children: React.ReactNode }) => {
     <div className="min-h-screen flex flex-col bg-background">
       <header className="sticky top-0 z-50 bg-background/80 backdrop-blur-lg border-b border-border">
         <div className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 flex items-center justify-between h-16">
-          <Link to="/" className="flex items-center gap-2 font-display font-bold text-xl">
-            <div className="w-8 h-8 rounded-lg eco-gradient flex items-center justify-center">
-              <Leaf className="w-5 h-5 text-primary-foreground" />
+          <Link to="/" className="flex items-center gap-2 font-display font-bold text-xl group">
+            <div className="w-8 h-8 rounded-lg eco-gradient flex items-center justify-center text-primary-foreground transition-transform group-hover:scale-110">
+              <EcoVoiceIcon className="w-5 h-5" />
             </div>
             <span className="eco-gradient-text">EcoVoice</span>
           </Link>
@@ -31,9 +32,9 @@ const Layout = ({ children }: { children: React.ReactNode }) => {
               <Link
                 key={link.to}
                 to={link.to}
-                className={`px-3 py-2 rounded-lg text-sm font-medium transition-colors ${
+                className={`px-3 py-2 rounded-lg text-sm font-medium transition-all duration-200 ${
                   location.pathname === link.to
-                    ? "bg-secondary text-secondary-foreground"
+                    ? "bg-secondary text-secondary-foreground shadow-sm"
                     : "text-muted-foreground hover:text-foreground hover:bg-muted"
                 }`}
               >
@@ -78,7 +79,7 @@ const Layout = ({ children }: { children: React.ReactNode }) => {
       <footer className="border-t border-border bg-card">
         <div className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 py-8 text-center text-sm text-muted-foreground">
           <div className="flex items-center justify-center gap-2 mb-2">
-            <Leaf className="w-4 h-4 text-primary" />
+            <EcoVoiceIcon className="w-4 h-4 text-primary" />
             <span className="font-display font-semibold text-foreground">EcoVoice</span>
           </div>
           <p>Sort Smarter. Live Greener. © {new Date().getFullYear()}</p>
