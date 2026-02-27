@@ -16,6 +16,12 @@ interface Message {
   content: string;
 }
 
+interface VoiceOption {
+  name: string;
+  lang: string;
+  voiceURI: string;
+}
+
 const CHAT_URL = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/chat-waste`;
 
 const LANGUAGE_PATTERNS: Array<{ lang: string; regex: RegExp }> = [
@@ -68,13 +74,28 @@ const Assistant = () => {
   const [listening, setListening] = useState(false);
   const [isTyping, setIsTyping] = useState(false);
   const [ttsLang, setTtsLang] = useState("en-IN");
-  const ttsSpeed = 1;
+  const [speechLanguage, setSpeechLanguage] = useState("auto");
+  const [ttsSpeed, setTtsSpeed] = useState(1);
   const [autoSpeak, setAutoSpeak] = useState(true);
   const [voiceTone, setVoiceTone] = useState<"friendly" | "formal">("friendly");
+  const [availableVoices, setAvailableVoices] = useState<VoiceOption[]>([]);
+  const [selectedVoiceURI, setSelectedVoiceURI] = useState("auto");
   const [location, setLocation] = useState<UserLocation | null>(() => getSavedLocation());
   const chatEndRef = useRef<HTMLDivElement>(null);
   const recognitionRef = useRef<SpeechRecognitionType | null>(null);
   const pendingSpeakRef = useRef<Promise<void>>(Promise.resolve());
+
+  useEffect(() => {
+    const loadVoices = () => {
+      const voices = window.speechSynthesis.getVoices();
+      setAvailableVoices(voices.map((v) => ({ name: v.name, lang: v.lang, voiceURI: v.voiceURI })));
+    };
+    loadVoices();
+    window.speechSynthesis.onvoiceschanged = loadVoices;
+    return () => {
+      window.speechSynthesis.onvoiceschanged = null;
+    };
+  }, []);
 
   useEffect(() => {
     chatEndRef.current?.scrollIntoView({ behavior: "smooth" });
@@ -91,7 +112,11 @@ const Assistant = () => {
       utterance.pitch = voiceTone === "friendly" ? 1.08 : 0.92;
 
       const voices = window.speechSynthesis.getVoices();
-      const match = voices.find((v) => v.lang === outputLang) || voices.find((v) => v.lang.startsWith(outputLang.split("-")[0]));
+      const selected = selectedVoiceURI !== "auto" ? voices.find((v) => v.voiceURI === selectedVoiceURI) : undefined;
+      const match =
+        selected ||
+        voices.find((v) => v.lang === outputLang) ||
+        voices.find((v) => v.lang.startsWith(outputLang.split("-")[0]));
 
       if (match) utterance.voice = match;
 
@@ -101,12 +126,12 @@ const Assistant = () => {
         window.speechSynthesis.speak(utterance);
       });
     });
-  }, [ttsLang, ttsSpeed, voiceTone]);
+  }, [selectedVoiceURI, ttsLang, ttsSpeed, voiceTone]);
 
   const sendMessage = async (text: string) => {
     if (!text.trim()) return;
-    const inferredLang = detectLanguageFromText(text);
-    setTtsLang(inferredLang);
+    const inferredLang = speechLanguage === "auto" ? detectLanguageFromText(text) : speechLanguage;
+    if (speechLanguage === "auto") setTtsLang(inferredLang);
 
     const userMsg: Message = { role: "user", content: text.trim() };
     const updatedMessages = [...messages, userMsg];
@@ -214,22 +239,23 @@ const Assistant = () => {
     const recognition = new SpeechRecognitionAPI();
     recognition.continuous = false;
     recognition.interimResults = true;
-    recognition.maxAlternatives = 1;
-    recognition.lang = navigator.language || "en-IN";
+    recognition.maxAlternatives = 3;
+    recognition.lang = speechLanguage === "auto" ? navigator.language || "en-IN" : speechLanguage;
 
     let latestTranscript = "";
     recognition.onstart = () => setListening(true);
     recognition.onresult = (event) => {
-      const latestResult = event.results[event.results.length - 1];
-      const transcript = latestResult[0].transcript.trim();
-      latestTranscript = transcript || latestTranscript;
-      setInput(latestTranscript);
+      const results = event.results;
+      let transcript = "";
+      for (let i = 0; i < results.length; i++) transcript += results[i][0].transcript;
+      setInput(transcript);
 
-      if (latestResult.isFinal && latestTranscript) {
-        const detected = detectLanguageFromText(latestTranscript);
-        setTtsLang(detected);
-        sendMessage(latestTranscript);
-        latestTranscript = "";
+      if (results[0].isFinal) {
+        if (speechLanguage === "auto") {
+          const detected = detectLanguageFromText(transcript);
+          setTtsLang(detected);
+        }
+        sendMessage(transcript);
         setListening(false);
       }
     };
@@ -258,11 +284,19 @@ const Assistant = () => {
       <div className="flex flex-col sm:flex-row gap-2 mb-3">
         <div className="flex-1">
           <TTSControls
+            language={ttsLang}
+            speechLanguage={speechLanguage}
+            speed={ttsSpeed}
             autoSpeak={autoSpeak}
             voiceTone={voiceTone}
-            detectedLanguageLabel={ttsLang}
+            voices={availableVoices}
+            selectedVoiceURI={selectedVoiceURI}
+            onLanguageChange={setTtsLang}
+            onSpeechLanguageChange={setSpeechLanguage}
+            onSpeedChange={setTtsSpeed}
             onAutoSpeakChange={setAutoSpeak}
             onVoiceToneChange={setVoiceTone}
+            onVoiceChange={setSelectedVoiceURI}
           />
         </div>
         <div className="flex items-center bg-muted/50 rounded-xl px-3 border border-border/50">
