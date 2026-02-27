@@ -16,9 +16,37 @@ interface Message {
   content: string;
 }
 
+interface VoiceOption {
+  name: string;
+  lang: string;
+  voiceURI: string;
+}
+
 const CHAT_URL = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/chat-waste`;
 
-// Eco success sound
+const LANGUAGE_PATTERNS: Array<{ lang: string; regex: RegExp }> = [
+  { lang: "hi-IN", regex: /[\u0900-\u097F]/ },
+  { lang: "bn-IN", regex: /[\u0980-\u09FF]/ },
+  { lang: "ta-IN", regex: /[\u0B80-\u0BFF]/ },
+  { lang: "te-IN", regex: /[\u0C00-\u0C7F]/ },
+  { lang: "kn-IN", regex: /[\u0C80-\u0CFF]/ },
+  { lang: "ml-IN", regex: /[\u0D00-\u0D7F]/ },
+  { lang: "gu-IN", regex: /[\u0A80-\u0AFF]/ },
+  { lang: "mr-IN", regex: /[\u0900-\u097F]/ },
+  { lang: "pa-IN", regex: /[\u0A00-\u0A7F]/ },
+];
+
+const detectLanguageFromText = (text: string): string => {
+  for (const pattern of LANGUAGE_PATTERNS) {
+    if (pattern.regex.test(text)) return pattern.lang;
+  }
+  const lower = text.toLowerCase();
+  if (/\b(hola|reciclar|botella)\b/.test(lower)) return "es-ES";
+  if (/\b(bonjour|recycler|déchet)\b/.test(lower)) return "fr-FR";
+  if (/\b(hallo|recycling|abfall)\b/.test(lower)) return "de-DE";
+  return "en-IN";
+};
+
 const playEcoSound = () => {
   try {
     const ctx = new AudioContext();
@@ -33,7 +61,9 @@ const playEcoSound = () => {
     gain.gain.exponentialRampToValueAtTime(0.01, ctx.currentTime + 0.4);
     osc.start(ctx.currentTime);
     osc.stop(ctx.currentTime + 0.4);
-  } catch { /* ignore audio errors */ }
+  } catch {
+    // no-op
+  }
 };
 
 const Assistant = () => {
@@ -44,30 +74,65 @@ const Assistant = () => {
   const [listening, setListening] = useState(false);
   const [isTyping, setIsTyping] = useState(false);
   const [ttsLang, setTtsLang] = useState("en-IN");
+  const [speechLanguage, setSpeechLanguage] = useState("auto");
   const [ttsSpeed, setTtsSpeed] = useState(1);
   const [autoSpeak, setAutoSpeak] = useState(true);
+  const [voiceTone, setVoiceTone] = useState<"friendly" | "formal">("friendly");
+  const [availableVoices, setAvailableVoices] = useState<VoiceOption[]>([]);
+  const [selectedVoiceURI, setSelectedVoiceURI] = useState("auto");
   const [location, setLocation] = useState<UserLocation | null>(() => getSavedLocation());
   const chatEndRef = useRef<HTMLDivElement>(null);
   const recognitionRef = useRef<SpeechRecognitionType | null>(null);
+  const pendingSpeakRef = useRef<Promise<void>>(Promise.resolve());
+
+  useEffect(() => {
+    const loadVoices = () => {
+      const voices = window.speechSynthesis.getVoices();
+      setAvailableVoices(voices.map((v) => ({ name: v.name, lang: v.lang, voiceURI: v.voiceURI })));
+    };
+    loadVoices();
+    window.speechSynthesis.onvoiceschanged = loadVoices;
+    return () => {
+      window.speechSynthesis.onvoiceschanged = null;
+    };
+  }, []);
 
   useEffect(() => {
     chatEndRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [messages, isTyping]);
 
-  const speak = useCallback((text: string) => {
-    window.speechSynthesis.cancel();
-    const cleanText = text.replace(/\*\*(.*?)\*\*/g, "$1").replace(/[#*_~`]/g, "");
-    const utterance = new SpeechSynthesisUtterance(cleanText);
-    utterance.lang = ttsLang;
-    utterance.rate = ttsSpeed;
-    const voices = window.speechSynthesis.getVoices();
-    const match = voices.find((v) => v.lang === ttsLang) || voices.find((v) => v.lang.startsWith(ttsLang.split("-")[0]));
-    if (match) utterance.voice = match;
-    window.speechSynthesis.speak(utterance);
-  }, [ttsLang, ttsSpeed]);
+  const speak = useCallback((text: string, forceLang?: string) => {
+    pendingSpeakRef.current = pendingSpeakRef.current.then(async () => {
+      window.speechSynthesis.cancel();
+      const cleanText = text.replace(/\*\*(.*?)\*\*/g, "$1").replace(/[#*_~`]/g, "");
+      const utterance = new SpeechSynthesisUtterance(cleanText);
+      const outputLang = forceLang || ttsLang;
+      utterance.lang = outputLang;
+      utterance.rate = voiceTone === "friendly" ? ttsSpeed : Math.max(0.8, ttsSpeed - 0.1);
+      utterance.pitch = voiceTone === "friendly" ? 1.08 : 0.92;
+
+      const voices = window.speechSynthesis.getVoices();
+      const selected = selectedVoiceURI !== "auto" ? voices.find((v) => v.voiceURI === selectedVoiceURI) : undefined;
+      const match =
+        selected ||
+        voices.find((v) => v.lang === outputLang) ||
+        voices.find((v) => v.lang.startsWith(outputLang.split("-")[0]));
+
+      if (match) utterance.voice = match;
+
+      await new Promise<void>((resolve) => {
+        utterance.onend = () => resolve();
+        utterance.onerror = () => resolve();
+        window.speechSynthesis.speak(utterance);
+      });
+    });
+  }, [selectedVoiceURI, ttsLang, ttsSpeed, voiceTone]);
 
   const sendMessage = async (text: string) => {
     if (!text.trim()) return;
+    const inferredLang = speechLanguage === "auto" ? detectLanguageFromText(text) : speechLanguage;
+    if (speechLanguage === "auto") setTtsLang(inferredLang);
+
     const userMsg: Message = { role: "user", content: text.trim() };
     const updatedMessages = [...messages, userMsg];
     setMessages(updatedMessages);
@@ -77,11 +142,7 @@ const Assistant = () => {
     let assistantSoFar = "";
 
     try {
-      const apiMessages = updatedMessages
-        .filter((_, i) => i > 0)
-        .map((m) => ({ role: m.role, content: m.content }));
-
-      // Add location context
+      const apiMessages = updatedMessages.filter((_, i) => i > 0).map((m) => ({ role: m.role, content: m.content }));
       const locationContext = location
         ? `User is in ${location.city}, ${location.state}, ${location.country}. Local rules: ${getLocationRules(location)}`
         : "User location unknown. Provide general recycling guidelines.";
@@ -92,14 +153,13 @@ const Assistant = () => {
           "Content-Type": "application/json",
           Authorization: `Bearer ${import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY}`,
         },
-        body: JSON.stringify({ messages: apiMessages, locationContext }),
+        body: JSON.stringify({ messages: apiMessages, locationContext, userLanguage: inferredLang, voiceTone }),
       });
 
       if (!resp.ok) {
         const errData = await resp.json().catch(() => ({}));
         throw new Error(errData.error || `Request failed (${resp.status})`);
       }
-
       if (!resp.body) throw new Error("No response body");
 
       const reader = resp.body.getReader();
@@ -110,7 +170,7 @@ const Assistant = () => {
         assistantSoFar += chunk;
         setMessages((prev) => {
           const last = prev[prev.length - 1];
-          if (last?.role === "assistant" && prev.length > 1 && last !== messages[0]) {
+          if (last?.role === "assistant" && prev.length > 1) {
             return prev.map((m, i) => (i === prev.length - 1 ? { ...m, content: assistantSoFar } : m));
           }
           return [...prev, { role: "assistant", content: assistantSoFar }];
@@ -128,34 +188,20 @@ const Assistant = () => {
           let line = textBuffer.slice(0, newlineIndex);
           textBuffer = textBuffer.slice(newlineIndex + 1);
           if (line.endsWith("\r")) line = line.slice(0, -1);
-          if (line.startsWith(":") || line.trim() === "") continue;
-          if (!line.startsWith("data: ")) continue;
+          if (line.startsWith(":") || line.trim() === "" || !line.startsWith("data: ")) continue;
+
           const jsonStr = line.slice(6).trim();
-          if (jsonStr === "[DONE]") { streamDone = true; break; }
+          if (jsonStr === "[DONE]") {
+            streamDone = true;
+            break;
+          }
           try {
             const parsed = JSON.parse(jsonStr);
             const content = parsed.choices?.[0]?.delta?.content as string | undefined;
             if (content) upsertAssistant(content);
           } catch {
-            textBuffer = line + "\n" + textBuffer;
-            break;
+            // skip malformed chunk
           }
-        }
-      }
-
-      if (textBuffer.trim()) {
-        for (let raw of textBuffer.split("\n")) {
-          if (!raw) continue;
-          if (raw.endsWith("\r")) raw = raw.slice(0, -1);
-          if (raw.startsWith(":") || raw.trim() === "") continue;
-          if (!raw.startsWith("data: ")) continue;
-          const jsonStr = raw.slice(6).trim();
-          if (jsonStr === "[DONE]") continue;
-          try {
-            const parsed = JSON.parse(jsonStr);
-            const content = parsed.choices?.[0]?.delta?.content as string | undefined;
-            if (content) upsertAssistant(content);
-          } catch { /* ignore */ }
         }
       }
 
@@ -164,7 +210,8 @@ const Assistant = () => {
       } else {
         playEcoSound();
         if (autoSpeak) {
-          setTimeout(() => speak(assistantSoFar), 200);
+          const responseLang = detectLanguageFromText(assistantSoFar);
+          setTimeout(() => speak(assistantSoFar, responseLang), 150);
         }
       }
     } catch (err: any) {
@@ -192,17 +239,21 @@ const Assistant = () => {
     const recognition = new SpeechRecognitionAPI();
     recognition.continuous = false;
     recognition.interimResults = true;
-    recognition.lang = ttsLang;
+    recognition.maxAlternatives = 3;
+    recognition.lang = speechLanguage === "auto" ? navigator.language || "en-IN" : speechLanguage;
 
     recognition.onstart = () => setListening(true);
     recognition.onresult = (event) => {
       const results = event.results;
       let transcript = "";
-      for (let i = 0; i < results.length; i++) {
-        transcript += results[i][0].transcript;
-      }
+      for (let i = 0; i < results.length; i++) transcript += results[i][0].transcript;
       setInput(transcript);
+
       if (results[0].isFinal) {
+        if (speechLanguage === "auto") {
+          const detected = detectLanguageFromText(transcript);
+          setTtsLang(detected);
+        }
         sendMessage(transcript);
         setListening(false);
       }
@@ -225,11 +276,18 @@ const Assistant = () => {
         <div className="flex-1">
           <TTSControls
             language={ttsLang}
+            speechLanguage={speechLanguage}
             speed={ttsSpeed}
             autoSpeak={autoSpeak}
+            voiceTone={voiceTone}
+            voices={availableVoices}
+            selectedVoiceURI={selectedVoiceURI}
             onLanguageChange={setTtsLang}
+            onSpeechLanguageChange={setSpeechLanguage}
             onSpeedChange={setTtsSpeed}
             onAutoSpeakChange={setAutoSpeak}
+            onVoiceToneChange={setVoiceTone}
+            onVoiceChange={setSelectedVoiceURI}
           />
         </div>
         <div className="flex items-center bg-muted/50 rounded-xl px-3 border border-border/50">

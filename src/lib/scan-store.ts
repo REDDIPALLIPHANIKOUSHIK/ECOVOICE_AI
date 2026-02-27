@@ -1,4 +1,4 @@
-// Local storage-based scan history with streaks and real-time tracking
+import { supabase } from "@/integrations/supabase/client";
 
 export interface ScanRecord {
   id: string;
@@ -10,42 +10,112 @@ export interface ScanRecord {
   disposal: string;
   timestamp: number;
   city?: string;
+  state?: string;
+  country?: string;
 }
 
 const STORAGE_KEY = "ecovoice_scans";
 const STREAK_KEY = "ecovoice_streak";
 
+const normalizeScan = (scan: Partial<ScanRecord>): ScanRecord => ({
+  id: scan.id || crypto.randomUUID(),
+  item: scan.item || scan.material || "Unknown",
+  category: scan.category || "Landfill",
+  material: scan.material || "Unknown",
+  confidence: Number(scan.confidence || 0),
+  contamination: scan.contamination || "Medium",
+  disposal: scan.disposal || "Check local guidelines.",
+  timestamp: scan.timestamp || Date.now(),
+  city: scan.city,
+  state: scan.state,
+  country: scan.country,
+});
+
+const saveScansLocally = (scans: ScanRecord[]) => {
+  localStorage.setItem(STORAGE_KEY, JSON.stringify(scans));
+};
+
 export const getScans = (): ScanRecord[] => {
   try {
-    return JSON.parse(localStorage.getItem(STORAGE_KEY) || "[]");
+    return (JSON.parse(localStorage.getItem(STORAGE_KEY) || "[]") as ScanRecord[])
+      .map(normalizeScan)
+      .sort((a, b) => b.timestamp - a.timestamp);
   } catch {
     return [];
   }
 };
 
-export const addScan = (scan: Omit<ScanRecord, "id" | "timestamp">): ScanRecord => {
-  const record: ScanRecord = {
+const mergeById = (local: ScanRecord[], remote: ScanRecord[]) => {
+  const byId = new Map<string, ScanRecord>();
+  [...remote, ...local].forEach((scan) => byId.set(scan.id, normalizeScan(scan)));
+  return Array.from(byId.values()).sort((a, b) => b.timestamp - a.timestamp);
+};
+
+export const syncScansFromDatabase = async () => {
+  const local = getScans();
+
+  const { data, error } = await supabase
+    .from("recycling_history")
+    .select("id,item,category,material,confidence,contamination,disposal,timestamp,city,state,country")
+    .order("timestamp", { ascending: false })
+    .limit(250);
+
+  if (error) {
+    // If table isn't provisioned or network fails, continue with local data.
+    return local;
+  }
+
+  const remote = (data || []).map((row: any) => ({
+    ...row,
+    timestamp: new Date(row.timestamp).getTime(),
+  }));
+
+  const merged = mergeById(local, remote);
+  saveScansLocally(merged);
+  return merged;
+};
+
+export const addScan = async (scan: Omit<ScanRecord, "id" | "timestamp">): Promise<ScanRecord> => {
+  const record = normalizeScan({
     ...scan,
     id: crypto.randomUUID(),
     timestamp: Date.now(),
-  };
-  const scans = getScans();
-  scans.unshift(record);
-  localStorage.setItem(STORAGE_KEY, JSON.stringify(scans));
-  updateStreak();
+  });
+
+  const existing = getScans();
+  saveScansLocally([record, ...existing]);
+  updateStreak(record.timestamp);
   window.dispatchEvent(new Event("ecovoice_scan_update"));
+
+  const { error } = await supabase.from("recycling_history").insert({
+    id: record.id,
+    item: record.item,
+    category: record.category,
+    material: record.material,
+    confidence: record.confidence,
+    contamination: record.contamination,
+    disposal: record.disposal,
+    timestamp: new Date(record.timestamp).toISOString(),
+    city: record.city,
+    state: record.state,
+    country: record.country,
+  });
+
+  if (!error) {
+    window.dispatchEvent(new Event("ecovoice_scan_update"));
+  }
+
   return record;
 };
 
-// Streak tracking
 interface StreakData {
   current: number;
   best: number;
-  lastScanDate: string; // YYYY-MM-DD
+  lastScanDate: string;
 }
 
-function getToday(): string {
-  return new Date().toISOString().split("T")[0];
+function getDateKey(ts: number): string {
+  return new Date(ts).toISOString().split("T")[0];
 }
 
 function getStreakData(): StreakData {
@@ -56,24 +126,17 @@ function getStreakData(): StreakData {
   }
 }
 
-function updateStreak() {
+function updateStreak(scanTimestamp: number) {
   const data = getStreakData();
-  const today = getToday();
-  const yesterday = new Date(Date.now() - 86400000).toISOString().split("T")[0];
+  const today = getDateKey(scanTimestamp);
+  const yesterday = new Date(scanTimestamp - 86400000).toISOString().split("T")[0];
 
-  if (data.lastScanDate === today) {
-    // Already scanned today, no change
-    return;
-  } else if (data.lastScanDate === yesterday) {
-    // Consecutive day
-    data.current += 1;
-  } else {
-    // Streak broken or first scan
-    data.current = 1;
-  }
+  if (data.lastScanDate === today) return;
+  if (data.lastScanDate === yesterday) data.current += 1;
+  else data.current = 1;
 
   data.lastScanDate = today;
-  if (data.current > data.best) data.best = data.current;
+  data.best = Math.max(data.best, data.current);
   localStorage.setItem(STREAK_KEY, JSON.stringify(data));
 }
 
@@ -84,45 +147,36 @@ export const getStats = () => {
   const total = scans.length;
   const streak = getStreakData();
 
-  // Category breakdown
   const categoryMap = new Map<string, number>();
-  scans.forEach((s) => {
-    categoryMap.set(s.category, (categoryMap.get(s.category) || 0) + 1);
-  });
+  scans.forEach((s) => categoryMap.set(s.category, (categoryMap.get(s.category) || 0) + 1));
 
-  // Impact calculations (per item estimates)
   const co2Saved = Math.round(total * 0.33 * 10) / 10;
   const waterSaved = Math.round(total * 8.5);
   const energySaved = Math.round(total * 0.61 * 10) / 10;
 
-  // Monthly breakdown
   const monthlyMap = new Map<string, number>();
   scans.forEach((s) => {
     const d = new Date(s.timestamp);
     const key = d.toLocaleString("default", { month: "short", year: "2-digit" });
     monthlyMap.set(key, (monthlyMap.get(key) || 0) + 1);
   });
+
   const monthlyData = Array.from(monthlyMap.entries())
     .map(([month, items]) => ({ month, items }))
     .reverse()
     .slice(-6);
 
-  // Today's scans
-  const today = getToday();
-  const todayScans = scans.filter((s) => new Date(s.timestamp).toISOString().split("T")[0] === today).length;
+  const today = getDateKey(Date.now());
+  const todayScans = scans.filter((s) => getDateKey(s.timestamp) === today).length;
+  const weekScans = scans.filter((s) => s.timestamp > Date.now() - 7 * 86400000).length;
 
-  // This week
-  const weekAgo = Date.now() - 7 * 86400000;
-  const weekScans = scans.filter((s) => s.timestamp > weekAgo).length;
-
-  // Badges — earned dynamically based on actual scan count
   const badges = [
-    { name: "Eco Starter", desc: "Scan 5 items", earned: total >= 5, icon: "🌱", threshold: 5 },
-    { name: "Green Hero", desc: "Scan 20 items", earned: total >= 20, icon: "🌿", threshold: 20 },
-    { name: "Planet Champion", desc: "Scan 50 items", earned: total >= 50, icon: "🌍", threshold: 50 },
-    { name: "Eco Legend", desc: "Scan 100 items", earned: total >= 100, icon: "🏆", threshold: 100 },
-    { name: "Streak Master", desc: "7-day streak", earned: streak.best >= 7, icon: "🔥", threshold: 7, current: streak.current },
-    { name: "Streak Legend", desc: "30-day streak", earned: streak.best >= 30, icon: "⚡", threshold: 30, current: streak.current },
+    { name: "Eco Starter", desc: "Scan 5 items", earned: total >= 5, icon: "🌱", threshold: 5, progress: total },
+    { name: "Green Hero", desc: "Scan 20 items", earned: total >= 20, icon: "🌿", threshold: 20, progress: total },
+    { name: "Planet Champion", desc: "Scan 50 items", earned: total >= 50, icon: "🌍", threshold: 50, progress: total },
+    { name: "Eco Legend", desc: "Scan 100 items", earned: total >= 100, icon: "🏆", threshold: 100, progress: total },
+    { name: "Streak Master", desc: "7-day streak", earned: streak.best >= 7, icon: "🔥", threshold: 7, progress: streak.current },
+    { name: "Streak Legend", desc: "30-day streak", earned: streak.best >= 30, icon: "⚡", threshold: 30, progress: streak.current },
   ];
 
   return {

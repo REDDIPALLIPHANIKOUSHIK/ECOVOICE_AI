@@ -10,7 +10,7 @@ serve(async (req) => {
   if (req.method === "OPTIONS") return new Response(null, { headers: corsHeaders });
 
   try {
-    const { messages, locationContext } = await req.json();
+    const { messages, locationContext, userLanguage, voiceTone } = await req.json();
     const LOVABLE_API_KEY = Deno.env.get("LOVABLE_API_KEY");
     if (!LOVABLE_API_KEY) throw new Error("LOVABLE_API_KEY is not configured");
 
@@ -30,6 +30,8 @@ serve(async (req) => {
             content: `You are EcoVoice — a multilingual, voice-first environmental assistant focused on guiding users on recycling, waste sorting, and sustainability actions in natural spoken language.
 
 Location context: ${locationInfo}
+Preferred response language: ${userLanguage || "auto"}
+Preferred tone: ${voiceTone || "friendly"}
 
 Your core responsibilities:
 1. Understand intent even if the question is casual, imprecise, or mixed with local slang or Hinglish.
