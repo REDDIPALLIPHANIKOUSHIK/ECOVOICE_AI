@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { Recycle, Droplets, Zap, Wind, Award, TrendingUp, Flame, Calendar, Target } from "lucide-react";
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, PieChart, Pie, Cell } from "recharts";
-import { getStats } from "@/lib/scan-store";
+import { getStats, syncScansFromDatabase } from "@/lib/scan-store";
 
 const AnimatedCounter = ({ target, suffix = "" }: { target: number; suffix?: string }) => {
   const [count, setCount] = useState(0);
@@ -35,7 +35,11 @@ const Dashboard = () => {
   const [data, setData] = useState(() => getStats());
 
   useEffect(() => {
-    const refresh = () => setData(getStats());
+    const refresh = async () => {
+      await syncScansFromDatabase().catch(() => undefined);
+      setData(getStats());
+    };
+    refresh();
     window.addEventListener("ecovoice_scan_update", refresh);
     return () => window.removeEventListener("ecovoice_scan_update", refresh);
   }, []);
@@ -172,7 +176,7 @@ const Dashboard = () => {
                   <div className="mt-1.5 h-1.5 rounded-full bg-border overflow-hidden">
                     <div
                       className="h-full rounded-full eco-gradient transition-all duration-500"
-                      style={{ width: `${Math.min(100, (data.total / badge.threshold) * 100)}%` }}
+                      style={{ width: `${Math.min(100, (badge.progress / badge.threshold) * 100)}%` }}
                     />
                   </div>
                 )}
@@ -181,7 +185,7 @@ const Dashboard = () => {
                 <span className="text-xs font-bold text-primary">✓</span>
               ) : (
                 <span className="text-xs text-muted-foreground">
-                  {badge.name.includes("Streak") ? `${data.streak.current}/${badge.threshold}` : `${data.total}/${badge.threshold}`}
+                  {`${badge.progress}/${badge.threshold}`}
                 </span>
               )}
             </div>

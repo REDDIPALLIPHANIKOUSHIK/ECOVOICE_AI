@@ -1,7 +1,7 @@
-import { useState, useEffect } from "react";
-import { MapPin, RefreshCw, X } from "lucide-react";
+import { useState } from "react";
+import { MapPin, RefreshCw, X, Navigation } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { detectLocation, getSavedLocation, clearLocation, type UserLocation } from "@/lib/location";
+import { detectLocation, clearLocation, type UserLocation } from "@/lib/location";
 import { toast } from "sonner";
 
 interface LocationSelectorProps {
@@ -40,8 +40,9 @@ const LocationSelector = ({ location, onLocationChange }: LocationSelectorProps)
           <span className="text-muted-foreground truncate max-w-[150px]">
             {location.city}, {location.state}
           </span>
-          <Button variant="ghost" size="sm" className="h-6 px-1.5" onClick={detect} disabled={detecting}>
-            <RefreshCw className={`w-3 h-3 ${detecting ? "animate-spin" : ""}`} />
+          <Button variant="ghost" size="sm" className="h-6 px-2 text-xs gap-1" onClick={detect} disabled={detecting}>
+            <Navigation className={`w-3 h-3 ${detecting ? "animate-spin" : ""}`} />
+            Change
           </Button>
           <Button variant="ghost" size="sm" className="h-6 px-1.5" onClick={clear}>
             <X className="w-3 h-3" />
