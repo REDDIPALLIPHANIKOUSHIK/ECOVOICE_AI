@@ -124,7 +124,7 @@ const TTSControls = ({
 
     <div className="flex items-center gap-1.5">
       <Switch checked={autoSpeak} onCheckedChange={onAutoSpeakChange} className="scale-75" />
-      <span className="text-muted-foreground">Auto</span>
+      <span className="text-muted-foreground">Auto voice reply</span>
     </div>
 
     <Button variant="outline" size="sm" className="h-7 text-xs gap-1 ml-auto" onClick={stopSpeaking} aria-label="Stop speaking">

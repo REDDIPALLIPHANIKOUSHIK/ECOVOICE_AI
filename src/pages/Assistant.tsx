@@ -81,6 +81,7 @@ const Assistant = () => {
   const [availableVoices, setAvailableVoices] = useState<VoiceOption[]>([]);
   const [selectedVoiceURI, setSelectedVoiceURI] = useState("auto");
   const [location, setLocation] = useState<UserLocation | null>(() => getSavedLocation());
+  const [lastUserLanguage, setLastUserLanguage] = useState("en-IN");
   const chatEndRef = useRef<HTMLDivElement>(null);
   const recognitionRef = useRef<SpeechRecognitionType | null>(null);
   const pendingSpeakRef = useRef<Promise<void>>(Promise.resolve());
@@ -242,6 +243,7 @@ const Assistant = () => {
     recognition.maxAlternatives = 3;
     recognition.lang = speechLanguage === "auto" ? navigator.language || "en-IN" : speechLanguage;
 
+    let latestTranscript = "";
     recognition.onstart = () => setListening(true);
     recognition.onresult = (event) => {
       const results = event.results;
@@ -259,7 +261,16 @@ const Assistant = () => {
       }
     };
     recognition.onerror = () => setListening(false);
-    recognition.onend = () => setListening(false);
+    recognition.onend = () => {
+      if (latestTranscript) {
+        const detected = detectLanguageFromText(latestTranscript);
+        setTtsLang(detected);
+        setLastUserLanguage(detected);
+        sendMessage(latestTranscript);
+        latestTranscript = "";
+      }
+      setListening(false);
+    };
 
     recognitionRef.current = recognition;
     recognition.start();
