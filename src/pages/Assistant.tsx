@@ -81,7 +81,6 @@ const Assistant = () => {
   const [availableVoices, setAvailableVoices] = useState<VoiceOption[]>([]);
   const [selectedVoiceURI, setSelectedVoiceURI] = useState("auto");
   const [location, setLocation] = useState<UserLocation | null>(() => getSavedLocation());
-  const [lastUserLanguage, setLastUserLanguage] = useState("en-IN");
   const chatEndRef = useRef<HTMLDivElement>(null);
   const recognitionRef = useRef<SpeechRecognitionType | null>(null);
   const pendingSpeakRef = useRef<Promise<void>>(Promise.resolve());
@@ -125,6 +124,8 @@ const Assistant = () => {
         utterance.onend = () => resolve();
         utterance.onerror = () => resolve();
         window.speechSynthesis.speak(utterance);
+        // Safety timeout in case onend never fires
+        setTimeout(() => resolve(), 60000);
       });
     });
   }, [selectedVoiceURI, ttsLang, ttsSpeed, voiceTone]);
@@ -240,10 +241,8 @@ const Assistant = () => {
     const recognition = new SpeechRecognitionAPI();
     recognition.continuous = false;
     recognition.interimResults = true;
-    recognition.maxAlternatives = 3;
     recognition.lang = speechLanguage === "auto" ? navigator.language || "en-IN" : speechLanguage;
 
-    let latestTranscript = "";
     recognition.onstart = () => setListening(true);
     recognition.onresult = (event) => {
       const results = event.results;
@@ -260,20 +259,22 @@ const Assistant = () => {
         setListening(false);
       }
     };
-    recognition.onerror = () => setListening(false);
+    recognition.onerror = (e) => {
+      console.error("Speech recognition error:", e);
+      setListening(false);
+      toast.error("Voice recognition failed. Please try again.");
+    };
     recognition.onend = () => {
-      if (latestTranscript) {
-        const detected = detectLanguageFromText(latestTranscript);
-        setTtsLang(detected);
-        setLastUserLanguage(detected);
-        sendMessage(latestTranscript);
-        latestTranscript = "";
-      }
       setListening(false);
     };
 
     recognitionRef.current = recognition;
-    recognition.start();
+    try {
+      recognition.start();
+    } catch (err) {
+      console.error("Failed to start recognition:", err);
+      toast.error("Could not access microphone. Please check permissions.");
+    }
   };
 
   return (

@@ -9,6 +9,7 @@ import Scanner from "./pages/Scanner";
 import Assistant from "./pages/Assistant";
 import Dashboard from "./pages/Dashboard";
 import History from "./pages/History";
+import Water from "./pages/Water";
 import About from "./pages/About";
 import NotFound from "./pages/NotFound";
 
@@ -27,6 +28,7 @@ const App = () => (
             <Route path="/assistant" element={<Assistant />} />
             <Route path="/dashboard" element={<Dashboard />} />
             <Route path="/history" element={<History />} />
+            <Route path="/water" element={<Water />} />
             <Route path="/about" element={<About />} />
             <Route path="*" element={<NotFound />} />
           </Routes>
