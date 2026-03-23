@@ -1,7 +1,8 @@
 import { useEffect, useState } from "react";
-import { Recycle, Droplets, Zap, Wind, Award, TrendingUp, Flame, Calendar, Target } from "lucide-react";
+import { Recycle, Droplets, Zap, Wind, Award, Flame, Calendar, Target, TrendingUp, Leaf } from "lucide-react";
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, PieChart, Pie, Cell } from "recharts";
 import { getStats, syncScansFromDatabase } from "@/lib/scan-store";
+import { calculateEcoScore, getDailyWaterTip } from "@/lib/water-intelligence";
 
 const AnimatedCounter = ({ target, suffix = "" }: { target: number; suffix?: string }) => {
   const [count, setCount] = useState(0);
@@ -33,6 +34,16 @@ const COLORS = [
 
 const Dashboard = () => {
   const [data, setData] = useState(() => getStats());
+  const [waterTipsViewed] = useState(() => {
+    try { return parseInt(localStorage.getItem("ecovoice_water_tips") || "0"); } catch { return 0; }
+  });
+
+  const dailyTip = getDailyWaterTip();
+  const ecoScore = calculateEcoScore({
+    totalScans: data.total,
+    streakDays: data.streak.current,
+    waterTipsViewed,
+  });
 
   useEffect(() => {
     const refresh = async () => {
@@ -66,20 +77,58 @@ const Dashboard = () => {
         </p>
       </div>
 
-      {/* Streak banner */}
-      {data.streak.current > 0 && (
-        <div className="eco-card p-4 mb-6 flex items-center gap-4 bg-gradient-to-r from-secondary to-accent/30 animate-fade-up">
-          <div className="w-12 h-12 rounded-xl eco-gradient flex items-center justify-center text-primary-foreground">
-            <Flame className="w-6 h-6" />
+      {/* EcoScore + Streak */}
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mb-6">
+        <div className="eco-card p-5 flex items-center gap-4 animate-fade-up">
+          <div className="relative w-16 h-16">
+            <svg className="w-16 h-16 -rotate-90" viewBox="0 0 36 36">
+              <circle cx="18" cy="18" r="15.9" fill="none" stroke="hsl(var(--border))" strokeWidth="3" />
+              <circle
+                cx="18" cy="18" r="15.9" fill="none"
+                stroke="hsl(var(--primary))" strokeWidth="3"
+                strokeDasharray={`${ecoScore.score} ${100 - ecoScore.score}`}
+                strokeLinecap="round"
+                className="transition-all duration-1000"
+              />
+            </svg>
+            <div className="absolute inset-0 flex items-center justify-center">
+              <span className="text-sm font-bold">{ecoScore.score}</span>
+            </div>
           </div>
           <div>
-            <p className="font-bold text-lg">{data.streak.current}-day streak! 🔥</p>
-            <p className="text-sm text-muted-foreground">
-              Best: {data.streak.best} days · Keep scanning daily to grow your streak!
+            <p className="font-bold text-lg flex items-center gap-2">
+              <Leaf className="w-4 h-4 text-primary" /> EcoScore
             </p>
+            <p className="text-sm text-primary font-medium">{ecoScore.level}</p>
+            {ecoScore.suggestions[0] && (
+              <p className="text-xs text-muted-foreground mt-1">{ecoScore.suggestions[0]}</p>
+            )}
           </div>
         </div>
-      )}
+
+        {data.streak.current > 0 ? (
+          <div className="eco-card p-5 flex items-center gap-4 bg-gradient-to-r from-secondary to-accent/30 animate-fade-up">
+            <div className="w-12 h-12 rounded-xl eco-gradient flex items-center justify-center text-primary-foreground">
+              <Flame className="w-6 h-6" />
+            </div>
+            <div>
+              <p className="font-bold text-lg">{data.streak.current}-day streak! 🔥</p>
+              <p className="text-sm text-muted-foreground">
+                Best: {data.streak.best} days · Keep scanning daily!
+              </p>
+            </div>
+          </div>
+        ) : (
+          <div className="eco-card p-5 flex items-center gap-3 animate-fade-up">
+            <span className="text-2xl">{dailyTip.icon}</span>
+            <div>
+              <p className="text-xs font-medium text-muted-foreground mb-0.5">💧 Daily Water Tip</p>
+              <p className="text-sm font-medium">{dailyTip.tip}</p>
+              <p className="text-xs text-primary mt-0.5">Saves: {dailyTip.savingPotential}</p>
+            </div>
+          </div>
+        )}
+      </div>
 
       <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-4 mb-8">
         {stats.map((stat, i) => (

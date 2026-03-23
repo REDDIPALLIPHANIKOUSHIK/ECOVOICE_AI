@@ -16,46 +16,46 @@ export type Database = {
     Tables: {
       recycling_history: {
         Row: {
-          id: string
-          item: string
           category: string
-          material: string
+          city: string | null
           confidence: number
           contamination: string
-          disposal: string
-          city: string | null
-          state: string | null
           country: string | null
-          timestamp: string
           created_at: string
-        }
-        Insert: {
+          disposal: string
           id: string
           item: string
-          category: string
           material: string
+          state: string | null
+          timestamp: string
+        }
+        Insert: {
+          category?: string
+          city?: string | null
           confidence?: number
           contamination?: string
-          disposal: string
-          city?: string | null
-          state?: string | null
           country?: string | null
-          timestamp?: string
           created_at?: string
-        }
-        Update: {
+          disposal?: string
           id?: string
           item?: string
-          category?: string
           material?: string
+          state?: string | null
+          timestamp?: string
+        }
+        Update: {
+          category?: string
+          city?: string | null
           confidence?: number
           contamination?: string
-          disposal?: string
-          city?: string | null
-          state?: string | null
           country?: string | null
-          timestamp?: string
           created_at?: string
+          disposal?: string
+          id?: string
+          item?: string
+          material?: string
+          state?: string | null
+          timestamp?: string
         }
         Relationships: []
       }
