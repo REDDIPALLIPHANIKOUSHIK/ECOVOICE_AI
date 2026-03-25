@@ -8,7 +8,7 @@ import TTSControls from "@/components/assistant/TTSControls";
 import LocationSelector from "@/components/LocationSelector";
 import WaveformAnimation from "@/components/WaveformAnimation";
 import { getSavedLocation, getLocationRules, type UserLocation } from "@/lib/location";
-import { useVoiceEngine, detectLanguage } from "@/hooks/useVoiceEngine";
+import { useVoiceEngine } from "@/hooks/useVoiceEngine";
 
 interface Message {
   role: "user" | "assistant";
@@ -32,10 +32,10 @@ const Assistant = () => {
     chatEndRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [messages, isTyping]);
 
-  const sendMessage = async (text: string) => {
+  const sendMessage = async (text: string, detectedLangOverride?: string) => {
     if (!text.trim()) return;
     voice.registerInteraction();
-    const inferredLang = voice.resolvedLang(text);
+    const inferredLang = detectedLangOverride || voice.resolvedLang(text);
 
     const userMsg: Message = { role: "user", content: text.trim() };
     const updatedMessages = [...messages, userMsg];
@@ -130,8 +130,7 @@ const Assistant = () => {
       } else {
         voice.playEcoSound();
         if (voice.autoSpeak) {
-          const responseLang = detectLanguage(finalResponse);
-          voice.speak(finalResponse, responseLang);
+          voice.speak(finalResponse, inferredLang);
         }
       }
     } catch (err: any) {
@@ -201,7 +200,9 @@ const Assistant = () => {
           <button
             onClick={() => {
               voice.registerInteraction();
-              voice.startListening(sendMessage);
+              voice.startListening((transcript, detectedLang) => {
+                void sendMessage(transcript, detectedLang);
+              });
             }}
             className={`absolute right-2 w-8 h-8 rounded-full flex items-center justify-center transition-all ${
               voice.listening

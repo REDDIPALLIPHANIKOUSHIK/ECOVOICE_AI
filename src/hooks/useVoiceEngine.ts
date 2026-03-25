@@ -9,8 +9,18 @@ const LANGUAGE_PATTERNS: Array<{ lang: string; regex: RegExp }> = [
   { lang: "kn-IN", regex: /[\u0C80-\u0CFF]/ },
 ];
 
+const ROMANIZED_LANGUAGE_HINTS: Array<{ lang: string; regex: RegExp }> = [
+  { lang: "hi-IN", regex: /\b(kya|kaise|nahi|hai|kripya|dhanyavad|pani|kachra|saf)\b/i },
+  { lang: "te-IN", regex: /\b(enti|ela|ledu|avunu|dhanyavadalu|neellu|chetta|paryavaranam)\b/i },
+  { lang: "ta-IN", regex: /\b(enna|eppadi|illai|nandri|tanni|kuppai|sutruchuzhal)\b/i },
+  { lang: "kn-IN", regex: /\b(yenu|hege|illa|dhanyavada|neeru|kasada|parisara)\b/i },
+];
+
 export const detectLanguage = (text: string): string => {
   for (const p of LANGUAGE_PATTERNS) {
+    if (p.regex.test(text)) return p.lang;
+  }
+  for (const p of ROMANIZED_LANGUAGE_HINTS) {
     if (p.regex.test(text)) return p.lang;
   }
   return "en-IN";
@@ -58,14 +68,18 @@ export function useVoiceEngine() {
 
   const pickVoice = useCallback((lang: string) => {
     const voices = window.speechSynthesis.getVoices();
+    const isEnglishTarget = lang.startsWith("en");
     const exactMatch = voices.find(v => v.lang === lang);
     const partialMatch = voices.find(v => v.lang.startsWith(lang.split("-")[0]));
-    const fallback = voices.find(v => v.lang.includes("IN")) || voices[0];
+    const indianNonEnglish = voices.find(v => v.lang.includes("IN") && !v.lang.toLowerCase().startsWith("en"));
+    const fallback = isEnglishTarget
+      ? (voices.find(v => v.lang.includes("IN")) || voices[0])
+      : (indianNonEnglish || voices.find(v => !v.lang.toLowerCase().startsWith("en")) || voices.find(v => v.lang.includes("IN")) || voices[0]);
     return exactMatch || partialMatch || fallback;
   }, []);
 
   const splitSpeechChunks = useCallback((text: string) => {
-    const sentenceChunks = text.match(/[^.!?]+[.!?]?/g)?.map(s => s.trim()).filter(Boolean) || [];
+    const sentenceChunks = text.match(/[^.!?।\n]+[.!?।]?/g)?.map(s => s.trim()).filter(Boolean) || [];
     if (sentenceChunks.length > 0) return sentenceChunks;
 
     const words = text.split(/\s+/).filter(Boolean);
@@ -99,6 +113,10 @@ export function useVoiceEngine() {
 
     if (!userInteractionReadyRef.current) {
       console.warn("[EcoVoice] Speech may be blocked: no prior user interaction captured");
+    }
+
+    if (!voicesLoadedRef.current) {
+      window.speechSynthesis.getVoices();
     }
 
     const speakChunk = (index: number, attempt: number) => {
@@ -163,7 +181,7 @@ export function useVoiceEngine() {
     setTimeout(() => speakChunk(0, 0), 60);
   }, [pickVoice, resolvedLang, splitSpeechChunks, voiceTone]);
 
-  const startListening = useCallback((onResult: (transcript: string) => void) => {
+  const startListening = useCallback((onResult: (transcript: string, detectedLang?: string) => void) => {
     registerInteraction();
     const SpeechRecognitionAPI = window.SpeechRecognition || window.webkitSpeechRecognition;
     if (!SpeechRecognitionAPI) {
@@ -184,7 +202,7 @@ export function useVoiceEngine() {
     const recognition = new SpeechRecognitionAPI();
     recognition.continuous = false;
     recognition.interimResults = true;
-    recognition.lang = language === "auto" ? (navigator.language || "en-IN") : language;
+    recognition.lang = language === "auto" ? ((navigator.language || "en-IN").includes("-") ? (navigator.language || "en-IN") : "en-IN") : language;
 
     recognition.onstart = () => {
       setListening(true);
@@ -193,12 +211,21 @@ export function useVoiceEngine() {
 
     recognition.onresult = (event) => {
       let transcript = "";
+      let finalTranscript = "";
       for (let i = 0; i < event.results.length; i++) {
-        transcript += event.results[i][0].transcript;
+        const result = event.results[i];
+        transcript += result[0].transcript;
+        if (result.isFinal) {
+          finalTranscript += result[0].transcript;
+        }
       }
-      if (event.results[0].isFinal) {
-        console.log("[EcoVoice] Transcript:", transcript);
-        onResult(transcript);
+
+      const resolvedTranscript = finalTranscript.trim() || transcript.trim();
+      if (resolvedTranscript && finalTranscript.trim()) {
+        const detectedLang = language === "auto" ? detectLanguage(resolvedTranscript) : language;
+        console.log("[EcoVoice] Transcript:", resolvedTranscript);
+        console.log("[EcoVoice] Detected input language:", detectedLang);
+        onResult(resolvedTranscript, detectedLang);
         setListening(false);
       }
     };

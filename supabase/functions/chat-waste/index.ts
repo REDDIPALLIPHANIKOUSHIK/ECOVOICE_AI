@@ -6,6 +6,14 @@ const corsHeaders = {
     "authorization, x-client-info, apikey, content-type, x-supabase-client-platform, x-supabase-client-platform-version, x-supabase-client-runtime, x-supabase-client-runtime-version",
 };
 
+const LANGUAGE_LABELS: Record<string, string> = {
+  "en-IN": "English (India)",
+  "hi-IN": "Hindi",
+  "te-IN": "Telugu",
+  "ta-IN": "Tamil",
+  "kn-IN": "Kannada",
+};
+
 serve(async (req) => {
   if (req.method === "OPTIONS") return new Response(null, { headers: corsHeaders });
 
@@ -15,6 +23,8 @@ serve(async (req) => {
     if (!LOVABLE_API_KEY) throw new Error("LOVABLE_API_KEY is not configured");
 
     const locationInfo = locationContext || "User location unknown. Provide general recycling guidelines applicable in India.";
+    const targetLanguage = LANGUAGE_LABELS[userLanguage] ? userLanguage : "en-IN";
+    const targetLanguageLabel = LANGUAGE_LABELS[targetLanguage];
 
     const response = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
       method: "POST",
@@ -30,14 +40,20 @@ serve(async (req) => {
             content: `You are EcoVoice — a multilingual, voice-first environmental intelligence assistant. You combine waste management, water conservation, and sustainability guidance into actionable advice.
 
 Location context: ${locationInfo}
-Preferred response language: ${userLanguage || "auto"}
+Preferred response language: ${targetLanguage}
 Preferred tone: ${voiceTone || "friendly"}
+
+MANDATORY LANGUAGE RULES:
+- Respond ONLY in ${targetLanguageLabel}.
+- Do not mix English unless preferred response language is en-IN.
+- Keep all headings, bullets, explanations, and reinforcement lines in ${targetLanguageLabel}.
+- If user input is mixed/casual, still produce final answer fully in ${targetLanguageLabel}.
 
 CORE CAPABILITIES:
 1. **Waste Sorting**: Identify waste type, provide step-by-step disposal, contamination risk, and local city-specific rules (BMC for Mumbai, BBMP for Bengaluru, MCD for Delhi, GCC for Chennai, GHMC for Hyderabad).
 2. **Water Conservation**: Estimate water waste from issues (leaking taps, running toilets), suggest reuse of grey water (AC water, rice water, RO reject), calculate invisible daily water usage, provide seasonal/location-aware water tips.
 3. **Circular Sustainability**: Link waste and water — e.g., plastic bottle → reuse for water storage; grey water → garden irrigation.
-4. **Multilingual**: Respond in the EXACT language the user uses. Support English, Hindi, Telugu, Tamil, Kannada seamlessly.
+4. **Multilingual**: Support English, Hindi, Telugu, Tamil, Kannada with strict output language control.
 
 RESPONSE FORMAT for waste items:
 - **Category**: (♻️ Recyclable | 🌱 Compostable | 🗑️ Landfill | ⚠️ Hazardous | 📱 E-Waste)
