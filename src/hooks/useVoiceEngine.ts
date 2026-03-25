@@ -212,7 +212,7 @@ export function useVoiceEngine() {
     recognition.onresult = (event) => {
       let transcript = "";
       let finalTranscript = "";
-      for (let i = event.resultIndex; i < event.results.length; i++) {
+      for (let i = 0; i < event.results.length; i++) {
         const result = event.results[i];
         transcript += result[0].transcript;
         if (result.isFinal) {
