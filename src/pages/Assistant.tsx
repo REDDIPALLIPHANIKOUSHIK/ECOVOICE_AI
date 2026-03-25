@@ -34,6 +34,7 @@ const Assistant = () => {
 
   const sendMessage = async (text: string) => {
     if (!text.trim()) return;
+    voice.registerInteraction();
     const inferredLang = voice.resolvedLang(text);
 
     const userMsg: Message = { role: "user", content: text.trim() };
@@ -80,6 +81,24 @@ const Assistant = () => {
         });
       };
 
+      const processSseLine = (rawLine: string) => {
+        let line = rawLine;
+        if (line.endsWith("\r")) line = line.slice(0, -1);
+        if (line.startsWith(":") || line.trim() === "" || !line.startsWith("data: ")) return false;
+
+        const jsonStr = line.slice(6).trim();
+        if (jsonStr === "[DONE]") return true;
+
+        try {
+          const parsed = JSON.parse(jsonStr);
+          const content = parsed.choices?.[0]?.delta?.content as string | undefined;
+          if (content) upsertAssistant(content);
+        } catch {
+          // skip malformed chunk
+        }
+        return false;
+      };
+
       let streamDone = false;
       while (!streamDone) {
         const { done, value } = await reader.read();
@@ -88,29 +107,31 @@ const Assistant = () => {
 
         let newlineIndex: number;
         while ((newlineIndex = textBuffer.indexOf("\n")) !== -1) {
-          let line = textBuffer.slice(0, newlineIndex);
+          const line = textBuffer.slice(0, newlineIndex);
           textBuffer = textBuffer.slice(newlineIndex + 1);
-          if (line.endsWith("\r")) line = line.slice(0, -1);
-          if (line.startsWith(":") || line.trim() === "" || !line.startsWith("data: ")) continue;
-
-          const jsonStr = line.slice(6).trim();
-          if (jsonStr === "[DONE]") { streamDone = true; break; }
-          try {
-            const parsed = JSON.parse(jsonStr);
-            const content = parsed.choices?.[0]?.delta?.content as string | undefined;
-            if (content) upsertAssistant(content);
-          } catch { /* skip */ }
+          if (processSseLine(line)) {
+            streamDone = true;
+            break;
+          }
         }
       }
 
-      if (!assistantSoFar) {
+      // Flush any remaining final chunk that may not end with a newline
+      const tail = textBuffer.trim();
+      if (!streamDone && tail) {
+        processSseLine(tail);
+      }
+
+      const finalResponse = assistantSoFar.trim();
+      console.log(`[EcoVoice] Final response length: ${finalResponse.length}`);
+
+      if (!finalResponse) {
         setMessages(prev => [...prev, { role: "assistant", content: "I couldn't generate a response. Please try again." }]);
       } else {
         voice.playEcoSound();
         if (voice.autoSpeak) {
-          const responseLang = detectLanguage(assistantSoFar);
-          // Small delay to ensure it's in user interaction flow
-          setTimeout(() => voice.speak(assistantSoFar, responseLang), 200);
+          const responseLang = detectLanguage(finalResponse);
+          voice.speak(finalResponse, responseLang);
         }
       }
     } catch (err: any) {
@@ -167,13 +188,21 @@ const Assistant = () => {
             type="text"
             value={input}
             onChange={(e) => setInput(e.target.value)}
-            onKeyDown={(e) => e.key === "Enter" && sendMessage(input)}
+            onKeyDown={(e) => {
+              if (e.key === "Enter") {
+                voice.registerInteraction();
+                void sendMessage(input);
+              }
+            }}
             placeholder="Ask about waste, water, or sustainability..."
             className="w-full bg-muted rounded-xl pl-4 pr-12 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-ring border border-border/50"
             aria-label="Type your question"
           />
           <button
-            onClick={() => voice.startListening(sendMessage)}
+            onClick={() => {
+              voice.registerInteraction();
+              voice.startListening(sendMessage);
+            }}
             className={`absolute right-2 w-8 h-8 rounded-full flex items-center justify-center transition-all ${
               voice.listening
                 ? "bg-destructive text-destructive-foreground animate-pulse"
@@ -184,7 +213,15 @@ const Assistant = () => {
             {voice.listening ? <MicOff className="w-4 h-4" /> : <Mic className="w-4 h-4" />}
           </button>
         </div>
-        <Button size="icon" onClick={() => sendMessage(input)} className="shrink-0 rounded-xl" aria-label="Send message">
+        <Button
+          size="icon"
+          onClick={() => {
+            voice.registerInteraction();
+            void sendMessage(input);
+          }}
+          className="shrink-0 rounded-xl"
+          aria-label="Send message"
+        >
           <Send className="w-4 h-4" />
         </Button>
       </div>
