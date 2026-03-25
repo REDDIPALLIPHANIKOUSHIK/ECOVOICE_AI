@@ -23,13 +23,21 @@ export function useVoiceEngine() {
   const [voiceTone, setVoiceTone] = useState<"friendly" | "formal">("friendly");
   const [autoSpeak, setAutoSpeak] = useState(true);
   const recognitionRef = useRef<SpeechRecognitionType | null>(null);
-  const speakQueueRef = useRef<Promise<void>>(Promise.resolve());
   const retryCountRef = useRef(0);
+  const voicesLoadedRef = useRef(false);
 
-  // Load voices early
+  // Pre-load voices and wait for them
   useEffect(() => {
-    window.speechSynthesis.getVoices();
-    window.speechSynthesis.onvoiceschanged = () => window.speechSynthesis.getVoices();
+    const loadVoices = () => {
+      const voices = window.speechSynthesis.getVoices();
+      if (voices.length > 0) {
+        voicesLoadedRef.current = true;
+        console.log("[EcoVoice] Voices loaded:", voices.length);
+        console.log("[EcoVoice] Indian voices:", voices.filter(v => v.lang.includes("IN")).map(v => `${v.name} (${v.lang})`));
+      }
+    };
+    loadVoices();
+    window.speechSynthesis.onvoiceschanged = loadVoices;
     return () => { window.speechSynthesis.onvoiceschanged = null; };
   }, []);
 
@@ -44,48 +52,67 @@ export function useVoiceEngine() {
   }, []);
 
   const speak = useCallback((text: string, forceLang?: string) => {
-    const doSpeak = async () => {
-      window.speechSynthesis.cancel();
-      const clean = text.replace(/\*\*(.*?)\*\*/g, "$1").replace(/[#*_~`]/g, "").trim();
-      if (!clean) return;
+    // Always cancel previous speech first
+    window.speechSynthesis.cancel();
 
-      const lang = forceLang || resolvedLang(text);
+    const clean = text.replace(/\*\*(.*?)\*\*/g, "$1").replace(/[#*_~`]/g, "").trim();
+    if (!clean) return;
+
+    const lang = forceLang || resolvedLang(text);
+
+    const doSpeak = (attempt: number) => {
       const utterance = new SpeechSynthesisUtterance(clean);
       utterance.lang = lang;
       utterance.rate = voiceTone === "friendly" ? 1.0 : 0.9;
       utterance.pitch = voiceTone === "friendly" ? 1.05 : 0.9;
 
+      // Find best matching voice
       const voices = window.speechSynthesis.getVoices();
-      const match = voices.find(v => v.lang === lang) || voices.find(v => v.lang.startsWith(lang.split("-")[0]));
-      if (match) utterance.voice = match;
+      const exactMatch = voices.find(v => v.lang === lang);
+      const partialMatch = voices.find(v => v.lang.startsWith(lang.split("-")[0]));
+      const fallback = voices.find(v => v.lang.includes("IN")) || voices[0];
+      
+      const selectedVoice = exactMatch || partialMatch || fallback;
+      if (selectedVoice) {
+        utterance.voice = selectedVoice;
+        console.log(`[EcoVoice] Speaking (attempt ${attempt + 1}): lang=${lang}, voice=${selectedVoice.name} (${selectedVoice.lang})`);
+      } else {
+        console.log(`[EcoVoice] No voice found for ${lang}, using default`);
+      }
 
       setIsSpeaking(true);
-      try {
-        await new Promise<void>((resolve, reject) => {
-          utterance.onend = () => resolve();
-          utterance.onerror = (e) => reject(e);
-          window.speechSynthesis.speak(utterance);
-          setTimeout(() => resolve(), 30000); // safety timeout
-        });
-      } catch (err) {
-        // Retry once
-        if (retryCountRef.current < 1) {
-          retryCountRef.current++;
-          await new Promise(r => setTimeout(r, 300));
-          window.speechSynthesis.speak(utterance);
-          await new Promise<void>(resolve => {
-            utterance.onend = () => resolve();
-            utterance.onerror = () => resolve();
-            setTimeout(() => resolve(), 30000);
-          });
-        }
-      } finally {
-        retryCountRef.current = 0;
+
+      utterance.onend = () => {
+        console.log("[EcoVoice] Speech completed");
         setIsSpeaking(false);
-      }
+        retryCountRef.current = 0;
+      };
+
+      utterance.onerror = (e) => {
+        console.warn("[EcoVoice] Speech error:", e.error);
+        setIsSpeaking(false);
+        // Retry once after 500ms
+        if (attempt < 1) {
+          retryCountRef.current = attempt + 1;
+          toast.info("Retrying voice…");
+          setTimeout(() => doSpeak(attempt + 1), 500);
+        } else {
+          retryCountRef.current = 0;
+          toast.error("Voice playback failed. Try again.");
+        }
+      };
+
+      window.speechSynthesis.speak(utterance);
+
+      // Chrome bug workaround: resume if paused
+      setTimeout(() => {
+        if (window.speechSynthesis.paused) {
+          window.speechSynthesis.resume();
+        }
+      }, 100);
     };
 
-    speakQueueRef.current = speakQueueRef.current.then(doSpeak).catch(() => setIsSpeaking(false));
+    doSpeak(0);
   }, [resolvedLang, voiceTone]);
 
   const startListening = useCallback((onResult: (transcript: string) => void) => {
@@ -101,24 +128,38 @@ export function useVoiceEngine() {
       return;
     }
 
+    // Stop any current speech
+    window.speechSynthesis.cancel();
+    setIsSpeaking(false);
+
     const recognition = new SpeechRecognitionAPI();
     recognition.continuous = false;
     recognition.interimResults = true;
     recognition.lang = language === "auto" ? (navigator.language || "en-IN") : language;
 
-    recognition.onstart = () => setListening(true);
+    recognition.onstart = () => {
+      setListening(true);
+      console.log("[EcoVoice] Listening started, lang:", recognition.lang);
+    };
+
     recognition.onresult = (event) => {
       let transcript = "";
-      for (let i = 0; i < event.results.length; i++) transcript += event.results[i][0].transcript;
+      for (let i = 0; i < event.results.length; i++) {
+        transcript += event.results[i][0].transcript;
+      }
       if (event.results[0].isFinal) {
+        console.log("[EcoVoice] Transcript:", transcript);
         onResult(transcript);
         setListening(false);
       }
     };
-    recognition.onerror = () => {
+
+    recognition.onerror = (e) => {
+      console.warn("[EcoVoice] Recognition error:", e);
       setListening(false);
       toast.error("Voice recognition failed. Please try again.");
     };
+
     recognition.onend = () => setListening(false);
 
     recognitionRef.current = recognition;
@@ -134,13 +175,15 @@ export function useVoiceEngine() {
       const ctx = new AudioContext();
       const osc = ctx.createOscillator();
       const gain = ctx.createGain();
-      osc.connect(gain); gain.connect(ctx.destination);
+      osc.connect(gain);
+      gain.connect(ctx.destination);
       osc.frequency.setValueAtTime(523, ctx.currentTime);
       osc.frequency.setValueAtTime(659, ctx.currentTime + 0.1);
       osc.frequency.setValueAtTime(784, ctx.currentTime + 0.2);
       gain.gain.setValueAtTime(0.12, ctx.currentTime);
       gain.gain.exponentialRampToValueAtTime(0.01, ctx.currentTime + 0.4);
-      osc.start(ctx.currentTime); osc.stop(ctx.currentTime + 0.4);
+      osc.start(ctx.currentTime);
+      osc.stop(ctx.currentTime + 0.4);
     } catch { /* no-op */ }
   }, []);
 

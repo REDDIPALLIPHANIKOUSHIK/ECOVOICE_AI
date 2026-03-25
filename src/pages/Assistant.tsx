@@ -1,5 +1,5 @@
 import { useState, useRef, useEffect } from "react";
-import { Send } from "lucide-react";
+import { Send, Mic, MicOff } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { toast } from "sonner";
 import ChatMessage from "@/components/assistant/ChatMessage";
@@ -7,7 +7,6 @@ import TypingIndicator from "@/components/assistant/TypingIndicator";
 import TTSControls from "@/components/assistant/TTSControls";
 import LocationSelector from "@/components/LocationSelector";
 import WaveformAnimation from "@/components/WaveformAnimation";
-import FloatingVoiceButton from "@/components/FloatingVoiceButton";
 import { getSavedLocation, getLocationRules, type UserLocation } from "@/lib/location";
 import { useVoiceEngine, detectLanguage } from "@/hooks/useVoiceEngine";
 
@@ -110,6 +109,7 @@ const Assistant = () => {
         voice.playEcoSound();
         if (voice.autoSpeak) {
           const responseLang = detectLanguage(assistantSoFar);
+          // Small delay to ensure it's in user interaction flow
           setTimeout(() => voice.speak(assistantSoFar, responseLang), 200);
         }
       }
@@ -133,10 +133,8 @@ const Assistant = () => {
         <div className="flex-1">
           <TTSControls
             language={voice.language}
-            voiceTone={voice.voiceTone}
             autoSpeak={voice.autoSpeak}
             onLanguageChange={voice.setLanguage}
-            onVoiceToneChange={voice.setVoiceTone}
             onAutoSpeakChange={voice.setAutoSpeak}
             onStop={voice.stopSpeaking}
             isSpeaking={voice.isSpeaking}
@@ -162,24 +160,34 @@ const Assistant = () => {
         <div ref={chatEndRef} />
       </div>
 
-      <div className="flex gap-2 pr-16">
-        <div className="flex-1 relative">
+      {/* Input bar with inline mic button */}
+      <div className="flex gap-2">
+        <div className="flex-1 relative flex items-center">
           <input
             type="text"
             value={input}
             onChange={(e) => setInput(e.target.value)}
             onKeyDown={(e) => e.key === "Enter" && sendMessage(input)}
             placeholder="Ask about waste, water, or sustainability..."
-            className="w-full bg-muted rounded-xl px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-ring border border-border/50"
+            className="w-full bg-muted rounded-xl pl-4 pr-12 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-ring border border-border/50"
             aria-label="Type your question"
           />
+          <button
+            onClick={() => voice.startListening(sendMessage)}
+            className={`absolute right-2 w-8 h-8 rounded-full flex items-center justify-center transition-all ${
+              voice.listening
+                ? "bg-destructive text-destructive-foreground animate-pulse"
+                : "bg-primary/10 text-primary hover:bg-primary/20"
+            }`}
+            aria-label={voice.listening ? "Stop listening" : "Start voice input"}
+          >
+            {voice.listening ? <MicOff className="w-4 h-4" /> : <Mic className="w-4 h-4" />}
+          </button>
         </div>
         <Button size="icon" onClick={() => sendMessage(input)} className="shrink-0 rounded-xl" aria-label="Send message">
           <Send className="w-4 h-4" />
         </Button>
       </div>
-
-      <FloatingVoiceButton listening={voice.listening} onToggle={() => voice.startListening(sendMessage)} showOnAssistant />
     </div>
   );
 };
