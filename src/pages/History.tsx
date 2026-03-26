@@ -1,6 +1,8 @@
 import { useState, useEffect } from "react";
-import { Recycle, Leaf, AlertTriangle, Zap, Trash2, Clock, Sparkles, MapPin, Flame } from "lucide-react";
+import { Recycle, Leaf, AlertTriangle, Zap, Trash2, Clock, Sparkles, MapPin, Flame, Filter, Droplets } from "lucide-react";
 import { getScans, getStreak, syncScansFromDatabase, type ScanRecord } from "@/lib/scan-store";
+
+type FilterType = "all" | "waste" | "water";
 
 const categoryIcon: Record<string, React.ReactNode> = {
   Recycle: <Recycle className="w-4 h-4" />,
@@ -33,6 +35,7 @@ const History = () => {
   const [scans, setScans] = useState<ScanRecord[]>([]);
   const [streak, setStreak] = useState(() => getStreak());
   const [quote] = useState(() => motivationalQuotes[Math.floor(Math.random() * motivationalQuotes.length)]);
+  const [filter, setFilter] = useState<FilterType>("all");
 
   useEffect(() => {
     const load = async () => {
@@ -53,12 +56,33 @@ const History = () => {
     return new Date(ts).toLocaleDateString();
   };
 
+  // Simple categorization: water-related categories vs waste
+  const isWaterAction = (scan: ScanRecord) => {
+    const waterKeywords = ["water", "liquid", "bottle", "container", "pipe"];
+    return waterKeywords.some((kw) => scan.item.toLowerCase().includes(kw) || scan.material.toLowerCase().includes(kw));
+  };
+
+  const filteredScans = scans.filter((scan) => {
+    if (filter === "all") return true;
+    if (filter === "water") return isWaterAction(scan);
+    return !isWaterAction(scan);
+  });
+
+  const waterCount = scans.filter(isWaterAction).length;
+  const wasteCount = scans.length - waterCount;
+
+  const filters: { id: FilterType; label: string; icon: React.ReactNode; count: number }[] = [
+    { id: "all", label: "All", icon: <Filter className="w-3.5 h-3.5" />, count: scans.length },
+    { id: "waste", label: "Waste", icon: <Recycle className="w-3.5 h-3.5" />, count: wasteCount },
+    { id: "water", label: "Water", icon: <Droplets className="w-3.5 h-3.5" />, count: waterCount },
+  ];
+
   return (
     <div className="page-container">
       <div className="text-center mb-8">
-        <h1 className="text-3xl sm:text-4xl font-display font-bold mb-2 eco-gradient-text">Recycle History</h1>
+        <h1 className="text-3xl sm:text-4xl font-display font-bold mb-2 eco-gradient-text">Eco History</h1>
         <p className="text-muted-foreground max-w-lg mx-auto">
-          Track your recycling journey and stay motivated!
+          Track your recycling journey and water actions
         </p>
       </div>
 
@@ -80,7 +104,26 @@ const History = () => {
           </div>
         </div>
 
-        {scans.length === 0 ? (
+        {/* Filter Tabs */}
+        <div className="flex gap-2 mb-4">
+          {filters.map((f) => (
+            <button
+              key={f.id}
+              onClick={() => setFilter(f.id)}
+              className={`flex items-center gap-1.5 px-3 py-2 rounded-lg text-sm font-medium transition-all duration-200 ${
+                filter === f.id
+                  ? "bg-secondary text-secondary-foreground shadow-sm"
+                  : "text-muted-foreground hover:text-foreground hover:bg-muted"
+              }`}
+            >
+              {f.icon}
+              {f.label}
+              <span className="text-xs opacity-70">({f.count})</span>
+            </button>
+          ))}
+        </div>
+
+        {filteredScans.length === 0 && scans.length === 0 ? (
           <div className="eco-card p-12 text-center">
             <Recycle className="w-12 h-12 text-muted-foreground mx-auto mb-4" />
             <p className="font-semibold mb-1">No scans yet</p>
@@ -88,9 +131,13 @@ const History = () => {
               Go to the Scanner page to start identifying waste items and building your eco-history! 🌿
             </p>
           </div>
+        ) : filteredScans.length === 0 ? (
+          <div className="eco-card p-8 text-center text-muted-foreground">
+            <p className="text-sm">No {filter} actions found in your history.</p>
+          </div>
         ) : (
           <div className="space-y-2">
-            {scans.map((scan, i) => (
+            {filteredScans.map((scan, i) => (
               <div
                 key={scan.id}
                 className={`eco-card p-4 animate-fade-up border-l-4 ${categoryColors[scan.category] || "border-l-border"}`}
@@ -106,6 +153,11 @@ const History = () => {
                       <span className="text-xs px-2 py-0.5 rounded-full bg-secondary text-secondary-foreground font-medium shrink-0">
                         {scan.category}
                       </span>
+                      {isWaterAction(scan) && (
+                        <span className="text-xs px-2 py-0.5 rounded-full bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-300 font-medium shrink-0">
+                          💧 Water
+                        </span>
+                      )}
                     </div>
                     <div className="flex items-center gap-2 text-xs text-muted-foreground mt-0.5 flex-wrap">
                       <Clock className="w-3 h-3" />
