@@ -1,16 +1,16 @@
 import { Link, useLocation } from "react-router-dom";
-import { Menu, X } from "lucide-react";
+import { Menu, X, Home, Camera, MessageSquare, BarChart3, Clock, Droplets, Info } from "lucide-react";
 import { useState } from "react";
 import EcoVoiceIcon from "./EcoVoiceIcon";
 
 const navLinks = [
-  { to: "/", label: "Home" },
-  { to: "/scanner", label: "Scanner" },
-  { to: "/assistant", label: "Assistant" },
-  { to: "/dashboard", label: "Dashboard" },
-  { to: "/history", label: "History" },
-  { to: "/water", label: "Water" },
-  { to: "/about", label: "About" },
+  { to: "/", label: "Home", icon: Home },
+  { to: "/scanner", label: "Scanner", icon: Camera },
+  { to: "/assistant", label: "Assistant", icon: MessageSquare },
+  { to: "/dashboard", label: "Dashboard", icon: BarChart3 },
+  { to: "/history", label: "History", icon: Clock },
+  { to: "/water", label: "Water", icon: Droplets },
+  { to: "/about", label: "About", icon: Info },
 ];
 
 const Layout = ({ children }: { children: React.ReactNode }) => {
@@ -28,20 +28,25 @@ const Layout = ({ children }: { children: React.ReactNode }) => {
             <span className="eco-gradient-text">EcoVoice</span>
           </Link>
 
-          <nav className="hidden md:flex items-center gap-1">
-            {navLinks.map((link) => (
-              <Link
-                key={link.to}
-                to={link.to}
-                className={`px-3 py-2 rounded-lg text-sm font-medium transition-all duration-200 ${
-                  location.pathname === link.to
-                    ? "bg-secondary text-secondary-foreground shadow-sm"
-                    : "text-muted-foreground hover:text-foreground hover:bg-muted"
-                }`}
-              >
-                {link.label}
-              </Link>
-            ))}
+          <nav className="hidden md:flex items-center gap-0.5">
+            {navLinks.map((link) => {
+              const Icon = link.icon;
+              const isActive = location.pathname === link.to;
+              return (
+                <Link
+                  key={link.to}
+                  to={link.to}
+                  className={`px-3 py-2 rounded-lg text-sm font-medium transition-all duration-200 flex items-center gap-1.5 ${
+                    isActive
+                      ? "bg-secondary text-secondary-foreground shadow-sm"
+                      : "text-muted-foreground hover:text-foreground hover:bg-muted"
+                  }`}
+                >
+                  <Icon className={`w-4 h-4 transition-colors ${isActive ? "text-primary" : ""}`} />
+                  {link.label}
+                </Link>
+              );
+            })}
           </nav>
 
           <button
@@ -56,20 +61,25 @@ const Layout = ({ children }: { children: React.ReactNode }) => {
         {mobileOpen && (
           <nav className="md:hidden border-t border-border bg-background animate-fade-in">
             <div className="px-4 py-2 space-y-1">
-              {navLinks.map((link) => (
-                <Link
-                  key={link.to}
-                  to={link.to}
-                  onClick={() => setMobileOpen(false)}
-                  className={`block px-3 py-2 rounded-lg text-sm font-medium transition-colors ${
-                    location.pathname === link.to
-                      ? "bg-secondary text-secondary-foreground"
-                      : "text-muted-foreground hover:text-foreground hover:bg-muted"
-                  }`}
-                >
-                  {link.label}
-                </Link>
-              ))}
+              {navLinks.map((link) => {
+                const Icon = link.icon;
+                const isActive = location.pathname === link.to;
+                return (
+                  <Link
+                    key={link.to}
+                    to={link.to}
+                    onClick={() => setMobileOpen(false)}
+                    className={`flex items-center gap-2.5 px-3 py-2.5 rounded-lg text-sm font-medium transition-colors ${
+                      isActive
+                        ? "bg-secondary text-secondary-foreground"
+                        : "text-muted-foreground hover:text-foreground hover:bg-muted"
+                    }`}
+                  >
+                    <Icon className={`w-4 h-4 ${isActive ? "text-primary" : ""}`} />
+                    {link.label}
+                  </Link>
+                );
+              })}
             </div>
           </nav>
         )}
