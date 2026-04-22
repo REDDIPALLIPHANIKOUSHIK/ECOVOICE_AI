@@ -115,6 +115,27 @@ const Water = () => {
           ))}
         </div>
 
+        {/* Voice Assistant for Water */}
+        {activeTab === "voice" && (
+          <VoiceAssistantPanel
+            title="Water Voice Assistant"
+            subtitle="Ask about leaks, reuse, savings — speak in any language 💧"
+            greeting={"Hi! I'm your Water Coach 💧\n\nAsk me anything about water — leaks, reuse, daily usage, or conservation tips. Speak in English, Hindi, Telugu, Tamil, or Kannada — I'll respond in your language!\n\nTry: \"How much water does a leaking tap waste?\" or \"पानी कैसे बचाएं?\""}
+            placeholder="Ask about water saving, leaks, reuse..."
+            systemContext={
+              waterContext
+                ? `Focus on water conservation. User's city: ${waterContext.city}. Water availability: ${waterContext.waterLevel}. Climate: ${waterContext.climate}. Provide localized, actionable water advice.`
+                : "Focus on water conservation. Provide actionable, location-aware advice when possible."
+            }
+            suggestions={[
+              "How to fix a leaking tap?",
+              "Can I reuse RO reject water?",
+              "How much water do I waste daily?",
+              "What if I ignore a leak?",
+            ]}
+          />
+        )}
+
         {/* Water Risk Prediction */}
         {activeTab === "estimator" && (
           <div className="space-y-4">
