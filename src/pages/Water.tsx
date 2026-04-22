@@ -56,6 +56,7 @@ const Water = () => {
   const handleWhatIf = () => setWhatIfResult(simulateWhatIf(whatIfInput));
 
   const tabs = [
+    { id: "voice" as const, label: "Voice", icon: <Mic className="w-4 h-4" /> },
     { id: "estimator" as const, label: "Risk", icon: <AlertTriangle className="w-4 h-4" /> },
     { id: "reuse" as const, label: "Reuse", icon: <RecycleIcon className="w-4 h-4" /> },
     { id: "invisible" as const, label: "Usage", icon: <Activity className="w-4 h-4" /> },
