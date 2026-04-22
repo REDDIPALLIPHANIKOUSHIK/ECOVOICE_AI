@@ -33,7 +33,7 @@ const Water = () => {
   const [reuseResult, setReuseResult] = useState<WaterReusability | null>(null);
   const [whatIfInput, setWhatIfInput] = useState("");
   const [whatIfResult, setWhatIfResult] = useState<WhatIfResult | null>(null);
-  const [activeTab, setActiveTab] = useState<"estimator" | "reuse" | "invisible" | "whatif" | "cross" | "coach">("estimator");
+  const [activeTab, setActiveTab] = useState<"voice" | "estimator" | "reuse" | "invisible" | "whatif" | "cross" | "coach">("voice");
   const [tips] = useState(() => getRandomTips(6));
   const [waterContext, setWaterContext] = useState<LocationWaterContext | null>(null);
   const [crossSuggestions] = useState<CrossImpactSuggestion[]>(() => getCrossImpactSuggestions());
