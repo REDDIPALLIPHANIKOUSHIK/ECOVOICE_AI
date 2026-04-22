@@ -1,8 +1,9 @@
 import { useState, useEffect } from "react";
 import {
   Droplets, Search, Recycle as RecycleIcon, Activity, Lightbulb, AlertTriangle,
-  CheckCircle, Info, MapPin, TrendingDown, FlaskConical, Zap, ArrowRight, Package,
+  CheckCircle, Info, MapPin, TrendingDown, FlaskConical, Zap, ArrowRight, Package, Mic,
 } from "lucide-react";
+import VoiceAssistantPanel from "@/components/VoiceAssistantPanel";
 import { Button } from "@/components/ui/button";
 import {
   estimateWaterWaste, analyzeWaterReusability, getInvisibleWaterUsage, getDailyTotalUsage,
@@ -32,7 +33,7 @@ const Water = () => {
   const [reuseResult, setReuseResult] = useState<WaterReusability | null>(null);
   const [whatIfInput, setWhatIfInput] = useState("");
   const [whatIfResult, setWhatIfResult] = useState<WhatIfResult | null>(null);
-  const [activeTab, setActiveTab] = useState<"estimator" | "reuse" | "invisible" | "whatif" | "cross" | "coach">("estimator");
+  const [activeTab, setActiveTab] = useState<"voice" | "estimator" | "reuse" | "invisible" | "whatif" | "cross" | "coach">("voice");
   const [tips] = useState(() => getRandomTips(6));
   const [waterContext, setWaterContext] = useState<LocationWaterContext | null>(null);
   const [crossSuggestions] = useState<CrossImpactSuggestion[]>(() => getCrossImpactSuggestions());
@@ -55,6 +56,7 @@ const Water = () => {
   const handleWhatIf = () => setWhatIfResult(simulateWhatIf(whatIfInput));
 
   const tabs = [
+    { id: "voice" as const, label: "Voice", icon: <Mic className="w-4 h-4" /> },
     { id: "estimator" as const, label: "Risk", icon: <AlertTriangle className="w-4 h-4" /> },
     { id: "reuse" as const, label: "Reuse", icon: <RecycleIcon className="w-4 h-4" /> },
     { id: "invisible" as const, label: "Usage", icon: <Activity className="w-4 h-4" /> },
@@ -112,6 +114,27 @@ const Water = () => {
             </button>
           ))}
         </div>
+
+        {/* Voice Assistant for Water */}
+        {activeTab === "voice" && (
+          <VoiceAssistantPanel
+            title="Water Voice Assistant"
+            subtitle="Ask about leaks, reuse, savings — speak in any language 💧"
+            greeting={"Hi! I'm your Water Coach 💧\n\nAsk me anything about water — leaks, reuse, daily usage, or conservation tips. Speak in English, Hindi, Telugu, Tamil, or Kannada — I'll respond in your language!\n\nTry: \"How much water does a leaking tap waste?\" or \"पानी कैसे बचाएं?\""}
+            placeholder="Ask about water saving, leaks, reuse..."
+            systemContext={
+              waterContext
+                ? `Focus on water conservation. User's city: ${waterContext.city}. Water availability: ${waterContext.waterLevel}. Climate: ${waterContext.climate}. Provide localized, actionable water advice.`
+                : "Focus on water conservation. Provide actionable, location-aware advice when possible."
+            }
+            suggestions={[
+              "How to fix a leaking tap?",
+              "Can I reuse RO reject water?",
+              "How much water do I waste daily?",
+              "What if I ignore a leak?",
+            ]}
+          />
+        )}
 
         {/* Water Risk Prediction */}
         {activeTab === "estimator" && (
