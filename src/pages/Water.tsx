@@ -1,8 +1,9 @@
 import { useState, useEffect } from "react";
 import {
   Droplets, Search, Recycle as RecycleIcon, Activity, Lightbulb, AlertTriangle,
-  CheckCircle, Info, MapPin, TrendingDown, FlaskConical, Zap, ArrowRight, Package,
+  CheckCircle, Info, MapPin, TrendingDown, FlaskConical, Zap, ArrowRight, Package, Mic,
 } from "lucide-react";
+import VoiceAssistantPanel from "@/components/VoiceAssistantPanel";
 import { Button } from "@/components/ui/button";
 import {
   estimateWaterWaste, analyzeWaterReusability, getInvisibleWaterUsage, getDailyTotalUsage,
