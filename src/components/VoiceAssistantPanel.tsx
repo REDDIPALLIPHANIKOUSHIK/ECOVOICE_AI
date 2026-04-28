@@ -1,10 +1,20 @@
 import { useState, useRef, useEffect } from "react";
-import { Send, Mic, MicOff, Volume2, VolumeX, Sparkles } from "lucide-react";
+import { Send, Mic, MicOff, Volume2, VolumeX, Sparkles, Globe } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { toast } from "sonner";
 import ChatMessage from "@/components/assistant/ChatMessage";
 import TypingIndicator from "@/components/assistant/TypingIndicator";
 import WaveformAnimation from "@/components/WaveformAnimation";
+
+const PANEL_LANGUAGES = [
+  { value: "auto", label: "🔍 Auto" },
+  { value: "en-IN", label: "🇮🇳 English" },
+  { value: "hi-IN", label: "हिन्दी" },
+  { value: "te-IN", label: "తెలుగు" },
+  { value: "ta-IN", label: "தமிழ்" },
+  { value: "kn-IN", label: "ಕನ್ನಡ" },
+];
 import { getSavedLocation, getLocationRules } from "@/lib/location";
 import { useVoiceEngine } from "@/hooks/useVoiceEngine";
 
@@ -149,6 +159,19 @@ const VoiceAssistantPanel = ({
           </div>
         </div>
         <div className="flex items-center gap-1">
+          <div className="flex items-center gap-1 bg-muted/60 rounded-lg px-1.5 h-8 border border-border/50">
+            <Globe className="w-3.5 h-3.5 text-muted-foreground" />
+            <Select value={voice.language} onValueChange={voice.setLanguage}>
+              <SelectTrigger className="h-7 w-[105px] text-xs border-none bg-transparent px-1 focus:ring-0">
+                <SelectValue placeholder="Language" />
+              </SelectTrigger>
+              <SelectContent>
+                {PANEL_LANGUAGES.map((l) => (
+                  <SelectItem key={l.value} value={l.value} className="text-xs">{l.label}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
           <button
             onClick={() => {
               voice.registerInteraction();
