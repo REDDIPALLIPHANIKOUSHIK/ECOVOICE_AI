@@ -159,6 +159,19 @@ const VoiceAssistantPanel = ({
           </div>
         </div>
         <div className="flex items-center gap-1">
+          <div className="flex items-center gap-1 bg-muted/60 rounded-lg px-1.5 h-8 border border-border/50">
+            <Globe className="w-3.5 h-3.5 text-muted-foreground" />
+            <Select value={voice.language} onValueChange={voice.setLanguage}>
+              <SelectTrigger className="h-7 w-[105px] text-xs border-none bg-transparent px-1 focus:ring-0">
+                <SelectValue placeholder="Language" />
+              </SelectTrigger>
+              <SelectContent>
+                {PANEL_LANGUAGES.map((l) => (
+                  <SelectItem key={l.value} value={l.value} className="text-xs">{l.label}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
           <button
             onClick={() => {
               voice.registerInteraction();
