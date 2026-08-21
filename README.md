@@ -1,73 +1,204 @@
-# Welcome to your Lovable project
+# 🌱 EcoVoice AI
 
-## Project info
+**EcoVoice AI** is a multilingual, voice-first environmental intelligence web application that helps users make smarter decisions about **waste management, recycling, water conservation, and sustainable living**.
 
-**URL**: https://lovable.dev/projects/REPLACE_WITH_PROJECT_ID
+🔗 **Live Demo:** https://ecovoice-one.vercel.app
 
-## How can I edit this code?
+## ✨ Features
 
-There are several ways of editing your application.
+- ♻️ **AI Waste Scanner** – Analyze a waste image and get its category, material, contamination level, confidence score, disposal instructions, and explanation.
+- 🎙️ **AI Assistant** – Ask sustainability questions conversationally and use voice-oriented navigation.
+- 🌍 **Multilingual Support** – English, Hindi, Telugu, Tamil, and Kannada.
+- 💧 **Water Conservation** – Guidance for leaks, grey-water reuse, water wastage estimation, and conservation.
+- 📍 **Location-Aware Guidance** – Uses location context for more relevant Indian recycling and sustainability recommendations.
+- 📊 **Dashboard & History** – View sustainability activity and previous analyses.
+- 👥 **Community** – Sustainability-focused community experience.
+- 📱 **Responsive UI** – Modern interface for web and mobile-sized screens.
 
-**Use Lovable**
+## 🧠 AI Capabilities
 
-Simply visit the [Lovable Project](https://lovable.dev/projects/REPLACE_WITH_PROJECT_ID) and start prompting.
+### Waste Image Analysis
 
-Changes made via Lovable will be committed automatically to this repo.
+The waste scanner sends an image to an AI gateway powered by **Google Gemini 2.5 Flash** and returns structured information:
 
-**Use your preferred IDE**
+- Category: Recycle / Compost / Landfill / Hazardous / E-waste
+- Material
+- Contamination level
+- Confidence score
+- Disposal instructions
+- Explanation
 
-If you want to work locally using your own IDE, you can clone this repo and push changes. Pushed changes will also be reflected in Lovable.
+### Conversational Sustainability Assistant
 
-The only requirement is having Node.js & npm installed - [install with nvm](https://github.com/nvm-sh/nvm#installing-and-updating)
+The assistant uses **Google Gemini 3 Flash Preview** through an AI gateway to provide actionable waste, water, and sustainability advice. The backend supports language selection, location context, tone, streaming responses, and India-specific municipal guidance.
 
-Follow these steps:
+## 🛠️ Tech Stack
 
-```sh
-# Step 1: Clone the repository using the project's Git URL.
-git clone <YOUR_GIT_URL>
+### Frontend
 
-# Step 2: Navigate to the project directory.
-cd <YOUR_PROJECT_NAME>
+- React 18
+- TypeScript
+- Vite
+- Tailwind CSS
+- shadcn/ui
+- React Router
+- TanStack React Query
+- Lucide React
+- Recharts
 
-# Step 3: Install the necessary dependencies.
-npm i
+### Backend & AI
 
-# Step 4: Start the development server with auto-reloading and an instant preview.
+- Supabase
+- Supabase Edge Functions
+- Deno / TypeScript
+- Supabase JavaScript Client
+- Lovable AI Gateway
+- Google Gemini 2.5 Flash – waste image analysis
+- Google Gemini 3 Flash Preview – conversational assistant
+
+### Development & Testing
+
+- ESLint
+- Vitest
+- Testing Library
+- PostCSS / Autoprefixer
+- npm / Bun
+
+The repository is a Vite + React + TypeScript application with Supabase Edge Functions for AI workflows. fileciteturn3file0L2-L2
+
+## 🏗️ Project Structure
+
+```text
+ECOVOICE_AI/
+├── public/
+├── src/
+│   ├── components/
+│   ├── hooks/
+│   ├── integrations/
+│   ├── lib/
+│   ├── pages/
+│   ├── test/
+│   ├── types/
+│   ├── App.tsx
+│   ├── App.css
+│   ├── index.css
+│   └── main.tsx
+├── supabase/
+│   └── functions/
+│       ├── analyze-waste/
+│       └── chat-waste/
+├── package.json
+└── README.md
+```
+
+The app includes dedicated pages for the landing experience, scanner, assistant, dashboard, history, water, about, and community sections. fileciteturn6file0L2-L2
+
+## 🚀 Getting Started
+
+### Prerequisites
+
+- Node.js
+- npm or Bun
+- A configured Supabase project
+- Required AI gateway environment variables
+
+### Installation
+
+```bash
+git clone https://github.com/REDDIPALLIPHANIKOUSHIK/ECOVOICE_AI.git
+cd ECOVOICE_AI
+npm install
+```
+
+### Environment Variables
+
+Configure the required environment variables for your frontend and Supabase Edge Functions.
+
+For the AI Edge Functions, the backend expects an AI gateway secret such as:
+
+```env
+LOVABLE_API_KEY=your_api_key_here
+```
+
+> Never commit real API keys or secrets to GitHub.
+
+### Run Locally
+
+```bash
 npm run dev
 ```
 
-**Edit a file directly in GitHub**
+Available scripts include development, production build, preview, linting, and testing. fileciteturn3file0L2-L2
 
-- Navigate to the desired file(s).
-- Click the "Edit" button (pencil icon) at the top right of the file view.
-- Make your changes and commit the changes.
+### Production Build
 
-**Use GitHub Codespaces**
+```bash
+npm run build
+```
 
-- Navigate to the main page of your repository.
-- Click on the "Code" button (green button) near the top right.
-- Select the "Codespaces" tab.
-- Click on "New codespace" to launch a new Codespace environment.
-- Edit files directly within the Codespace and commit and push your changes once you're done.
+### Preview Build
 
-## What technologies are used for this project?
+```bash
+npm run preview
+```
 
-This project is built with:
+### Tests
 
-- Vite
-- TypeScript
-- React
-- shadcn-ui
-- Tailwind CSS
+```bash
+npm test
+```
 
-## How can I deploy this project?
+### Lint
 
-Simply open [Lovable](https://lovable.dev/projects/REPLACE_WITH_PROJECT_ID) and click on Share -> Publish.
+```bash
+npm run lint
+```
 
-## Can I connect a custom domain to my Lovable project?
+## 🔄 How It Works
 
-Yes, you can!
+```text
+                     ┌──────────────────┐
+                     │      User        │
+                     └────────┬─────────┘
+                              │
+              ┌───────────────┴───────────────┐
+              │                               │
+       Upload waste image              Ask AI / voice query
+              │                               │
+              ▼                               ▼
+     Supabase Edge Function          Supabase Edge Function
+      analyze-waste                    chat-waste
+              │                               │
+              ▼                               ▼
+      Gemini 2.5 Flash                Gemini 3 Flash Preview
+              │                               │
+              ▼                               ▼
+      Waste classification      Multilingual sustainability guidance
+```
 
-To connect a domain, navigate to Project > Settings > Domains and click Connect Domain.
+The `analyze-waste` function validates the uploaded image, calls the AI gateway, parses the structured JSON response, and returns the classification. fileciteturn8file0L2-L2
 
-Read more here: [Setting up a custom domain](https://docs.lovable.dev/features/custom-domain#custom-domain)
+The `chat-waste` function sends conversation history together with language, location, and tone context and streams the AI response back to the client. fileciteturn9file0L2-L2
+
+## 🌟 Why EcoVoice?
+
+EcoVoice makes environmental guidance **simple, accessible, and actionable**. Users can identify waste, understand how to dispose of it, conserve water, and receive personalized sustainability advice through one AI-powered experience.
+
+## 🔮 Future Improvements
+
+- Expand regional-language support
+- Improve city-level recycling recommendations
+- Add personalized sustainability goals and achievements
+- Add richer waste and water analytics
+- Introduce reminders and habit tracking
+- Improve offline and low-connectivity support
+
+## 👨‍💻 Author
+
+**Reddipalli Phani Koushik**
+
+GitHub: https://github.com/REDDIPALLIPHANIKOUSHIK
+
+## 📄 License
+
+This repository currently does not specify an open-source license.
